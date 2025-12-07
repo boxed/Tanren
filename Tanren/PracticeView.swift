@@ -19,6 +19,7 @@ struct PracticeView: View {
     @State private var currentCardIndex = 0
     @State private var currentStage: PracticeStage = .comfortable
     @State private var sessionComplete = false
+    @State private var showBuryConfirmation = false
 
     init(deck: Deck, startingCard: Card? = nil) {
         self.deck = deck
@@ -110,13 +111,29 @@ struct PracticeView: View {
 
             // Current BPM levels for this card
             bpmLevelsView(card: card)
-
+            
             Spacer()
 
             // Metronome section
             metronomeView
-
+            
             Spacer()
+            
+            // Bury button
+            Button("Bury card") {
+                showBuryConfirmation = true
+            }
+            .font(.subheadline)
+            .padding(.bottom)
+            .confirmationDialog("Bury this card?", isPresented: $showBuryConfirmation, titleVisibility: .visible) {
+                Button("Bury", role: .destructive) {
+                    buryCurrentCard()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This card will be moved to the end of the practice session.")
+            }
+
 
             // Stage action button
             stageActionView(card: card)
@@ -124,21 +141,49 @@ struct PracticeView: View {
         }
     }
 
+    private func buryCurrentCard() {
+        guard currentCardIndex < practiceCards.count else { return }
+
+        metronome.stop()
+
+        // Remove current card and append to end
+        let card = practiceCards.remove(at: currentCardIndex)
+        practiceCards.append(card)
+
+        // Reset to comfortable stage for the new current card
+        currentStage = .comfortable
+
+        if currentCardIndex >= practiceCards.count {
+            sessionComplete = true
+        } else if let nextCard = currentCard {
+            metronome.setBPM(nextCard.startingBPM(for: .comfortable))
+        }
+    }
+
     private var stageIndicatorView: some View {
         HStack(spacing: 4) {
             ForEach(PracticeStage.allCases, id: \.rawValue) { stage in
-                VStack(spacing: 2) {
-                    Circle()
-                        .fill(stageColor(stage))
-                        .frame(width: 12, height: 12)
-                    Text(stage.title)
-                        .font(.caption2)
-                        .foregroundStyle(stage == currentStage ? .primary : .secondary)
+                Button(action: { jumpToStage(stage) }) {
+                    VStack(spacing: 2) {
+                        Circle()
+                            .fill(stageColor(stage))
+                            .frame(width: 12, height: 12)
+                        Text(stage.title)
+                            .font(.caption2)
+                            .foregroundStyle(stage == currentStage ? .primary : .secondary)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal)
+    }
+
+    private func jumpToStage(_ stage: PracticeStage) {
+        guard let card = currentCard else { return }
+        currentStage = stage
+        metronome.setBPM(card.startingBPM(for: stage))
     }
 
     private func stageColor(_ stage: PracticeStage) -> Color {
@@ -218,11 +263,12 @@ struct PracticeView: View {
                 VStack(spacing: 2) {
                     Text("\(metronome.bpm)")
                         .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .fixedSize()
                     Text("BPM")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                .frame(width: 80)
 
                 Button(action: { metronome.increaseBPM() }) {
                     Image(systemName: "plus.circle.fill")
