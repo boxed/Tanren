@@ -106,19 +106,23 @@ struct PracticeView: View {
             }
             .padding(.top, 8)
 
-            // Stage indicator
-            stageIndicatorView
+            if deck.metronomeEnabled {
+                // Stage indicator
+                stageIndicatorView
 
-            // Current BPM levels for this card
-            bpmLevelsView(card: card)
-            
+                // Current BPM levels for this card
+                bpmLevelsView(card: card)
+            }
+
             Spacer()
 
-            // Metronome section
-            metronomeView
-            
+            if deck.metronomeEnabled {
+                // Metronome section
+                metronomeView
+            }
+
             Spacer()
-            
+
             // Bury button
             Button("Bury card") {
                 showBuryConfirmation = true
@@ -290,24 +294,51 @@ struct PracticeView: View {
 
     private func stageActionView(card: Card) -> some View {
         VStack(spacing: 12) {
-            Text(currentStage.description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if deck.metronomeEnabled {
+                Text(currentStage.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
-            Button(action: { completeStage(card: card) }) {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("Done with \(currentStage.title)")
+                Button(action: { completeStage(card: card) }) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Done with \(currentStage.title)")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(stageColor(currentStage))
+                    .foregroundStyle(.white)
+                    .cornerRadius(12)
+                    .font(.headline)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(stageColor(currentStage))
-                .foregroundStyle(.white)
-                .cornerRadius(12)
-                .font(.headline)
+            } else {
+                Button(action: { completeCardWithoutMetronome(card: card) }) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Done")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .cornerRadius(12)
+                    .font(.headline)
+                }
             }
         }
+    }
+
+    private func completeCardWithoutMetronome(card: Card) {
+        SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: true)
+
+        currentCardIndex += 1
+
+        if currentCardIndex >= practiceCards.count {
+            sessionComplete = true
+        }
+
+        try? modelContext.save()
     }
 
     private func completeStage(card: Card) {

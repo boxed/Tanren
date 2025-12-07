@@ -9,6 +9,8 @@ import SwiftData
 struct DeckListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var decks: [Deck]
+    @State private var showingNewDeckAlert = false
+    @State private var newDeckName = ""
 
     var body: some View {
         List {
@@ -22,9 +24,18 @@ struct DeckListView: View {
         .navigationTitle("Tanren")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: addDeck) {
+                Button(action: { showingNewDeckAlert = true }) {
                     Label("Add Deck", systemImage: "plus")
                 }
+            }
+        }
+        .alert("New Deck", isPresented: $showingNewDeckAlert) {
+            TextField("Deck name", text: $newDeckName)
+            Button("Cancel", role: .cancel) {
+                newDeckName = ""
+            }
+            Button("Create") {
+                addDeck()
             }
         }
         .onAppear {
@@ -33,8 +44,11 @@ struct DeckListView: View {
     }
 
     private func addDeck() {
-        let newDeck = Deck(name: "New Deck")
+        let name = newDeckName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let newDeck = Deck(name: name)
         modelContext.insert(newDeck)
+        newDeckName = ""
     }
 
     private func deleteDecks(offsets: IndexSet) {

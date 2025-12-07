@@ -7,9 +7,13 @@ import SwiftUI
 import SwiftData
 
 struct DeckDetailView: View {
+    @Environment(\.modelContext) private var modelContext
     @Bindable var deck: Deck
     @State private var showingPractice = false
+    @State private var showingSettings = false
+    @State private var showingAddCard = false
     @State private var selectedCard: Card?
+    @State private var cardToEdit: Card?
 
     var dueCount: Int {
         SpacedRepetitionManager.selectCardsForPractice(from: deck).count
@@ -38,16 +42,150 @@ struct DeckDetailView: View {
                         CardRowView(card: card)
                     }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            deleteCard(card)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            cardToEdit = card
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.blue)
+                    }
                 }
             }
         }
         .navigationTitle(deck.name)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack {
+                    Button(action: { showingAddCard = true }) {
+                        Label("Add Card", systemImage: "plus")
+                    }
+                    Button(action: { showingSettings = true }) {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+            }
+        }
         .fullScreenCover(isPresented: $showingPractice) {
             PracticeView(deck: deck)
         }
         .fullScreenCover(item: $selectedCard) { card in
             PracticeView(deck: deck, startingCard: card)
         }
+        .sheet(isPresented: $showingSettings) {
+            DeckSettingsView(deck: deck)
+        }
+        .sheet(isPresented: $showingAddCard) {
+            AddCardView(deck: deck)
+        }
+        .sheet(item: $cardToEdit) { card in
+            EditCardView(card: card)
+        }
+    }
+
+    private func deleteCard(_ card: Card) {
+        deck.cards.removeAll { $0.id == card.id }
+        modelContext.delete(card)
+    }
+}
+
+struct AddCardView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    let deck: Deck
+
+    @State private var side1 = ""
+    @State private var side2 = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Side 1", text: $side1)
+                    TextField("Side 2", text: $side2)
+                }
+            }
+            .navigationTitle("Add Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Add") {
+                        addCard()
+                    }
+                    .disabled(side1.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func addCard() {
+        let card = Card(
+            chord1: side1.trimmingCharacters(in: .whitespaces),
+            chord2: side2.trimmingCharacters(in: .whitespaces),
+            deck: deck
+        )
+        deck.cards.append(card)
+        modelContext.insert(card)
+        dismiss()
+    }
+}
+
+struct EditCardView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var card: Card
+
+    @State private var side1: String
+    @State private var side2: String
+
+    init(card: Card) {
+        self.card = card
+        _side1 = State(initialValue: card.chord1)
+        _side2 = State(initialValue: card.chord2)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Side 1", text: $side1)
+                    TextField("Side 2", text: $side2)
+                }
+            }
+            .navigationTitle("Edit Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveCard()
+                    }
+                    .disabled(side1.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func saveCard() {
+        card.chord1 = side1.trimmingCharacters(in: .whitespaces)
+        card.chord2 = side2.trimmingCharacters(in: .whitespaces)
+        card.name = "\(card.chord1) ↔ \(card.chord2)"
+        dismiss()
     }
 }
 
