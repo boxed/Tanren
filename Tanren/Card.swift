@@ -125,6 +125,12 @@ final class Card {
         nextReviewDate <= Date()
     }
 
+    /// Whether this card was already practiced today
+    var wasPracticedToday: Bool {
+        guard let lastReview = lastReviewDate else { return false }
+        return Calendar.current.isDateInToday(lastReview)
+    }
+
     /// Priority score for card selection (lower = higher priority)
     var priorityScore: Double {
         var score = easeFactor // Lower ease = harder = higher priority

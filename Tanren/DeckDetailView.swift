@@ -11,8 +11,8 @@ struct DeckDetailView: View {
     @State private var showingPractice = false
     @State private var selectedCard: Card?
 
-    var dueCards: [Card] {
-        deck.cards.filter { $0.isDue }
+    var dueCount: Int {
+        SpacedRepetitionManager.selectCardsForPractice(from: deck).count
     }
 
     var body: some View {
@@ -23,8 +23,8 @@ struct DeckDetailView: View {
                         Image(systemName: "play.fill")
                         Text("Start Practice")
                         Spacer()
-                        if !dueCards.isEmpty {
-                            Text("\(dueCards.count) due")
+                        if dueCount > 0 {
+                            Text("\(dueCount) due")
                                 .foregroundStyle(.secondary)
                         }
                     }

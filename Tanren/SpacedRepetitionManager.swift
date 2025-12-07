@@ -48,10 +48,20 @@ struct SpacedRepetitionManager {
         ) ?? Date()
     }
 
+    /// How many cards were already practiced today in this deck
+    static func cardsPracticedToday(in deck: Deck) -> Int {
+        deck.cards.filter { $0.wasPracticedToday }.count
+    }
+
     /// Selects cards for practice from a deck
     /// Prioritizes due cards and weak spots, but includes some randomness
     static func selectCardsForPractice(from deck: Deck, maxCards: Int = 10) -> [Card] {
-        let allCards = deck.cards
+        // Exclude cards already practiced today
+        let allCards = deck.cards.filter { !$0.wasPracticedToday }
+
+        // Reduce max cards by how many were already done today
+        let remainingQuota = max(0, maxCards - cardsPracticedToday(in: deck))
+        guard remainingQuota > 0 else { return [] }
 
         // Separate due and not-due cards
         let dueCards = allCards.filter { $0.isDue }
@@ -63,19 +73,19 @@ struct SpacedRepetitionManager {
         var selectedCards: [Card] = []
 
         // Take up to 80% from due cards
-        let dueCount = min(sortedDueCards.count, Int(Double(maxCards) * 0.8))
+        let dueCount = min(sortedDueCards.count, Int(Double(remainingQuota) * 0.8))
         selectedCards.append(contentsOf: sortedDueCards.prefix(dueCount))
 
         // Fill remaining slots with random not-due cards (for exposure)
-        let remainingSlots = maxCards - selectedCards.count
+        let remainingSlots = remainingQuota - selectedCards.count
         if remainingSlots > 0 && !notDueCards.isEmpty {
             let randomNotDue = notDueCards.shuffled().prefix(remainingSlots)
             selectedCards.append(contentsOf: randomNotDue)
         }
 
         // If we still don't have enough, add more due cards
-        if selectedCards.count < maxCards && sortedDueCards.count > dueCount {
-            let additionalDue = sortedDueCards.dropFirst(dueCount).prefix(maxCards - selectedCards.count)
+        if selectedCards.count < remainingQuota && sortedDueCards.count > dueCount {
+            let additionalDue = sortedDueCards.dropFirst(dueCount).prefix(remainingQuota - selectedCards.count)
             selectedCards.append(contentsOf: additionalDue)
         }
 
