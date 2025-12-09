@@ -103,13 +103,46 @@ struct AddCardView: View {
 
     @State private var side1 = ""
     @State private var side2 = ""
+    @State private var url = ""
+    @State private var selectedImage: UIImage?
+    @State private var showingImagePicker = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Side 1", text: $side1)
-                    TextField("Side 2", text: $side2)
+                    if deck.side2Enabled {
+                        TextField("Side 2", text: $side2)
+                    }
+                }
+
+                if deck.imagesEnabled {
+                    Section("Image") {
+                        if let image = selectedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 200)
+                        }
+                        Button(selectedImage == nil ? "Add Image" : "Change Image") {
+                            showingImagePicker = true
+                        }
+                        if selectedImage != nil {
+                            Button("Remove Image", role: .destructive) {
+                                selectedImage = nil
+                            }
+                        }
+                    }
+                }
+
+                if deck.urlEnabled {
+                    Section("URL") {
+                        TextField("URL", text: $url)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocapitalization(.none)
+                    }
                 }
             }
             .navigationTitle("Add Card")
@@ -127,14 +160,21 @@ struct AddCardView: View {
                     .disabled(side1.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(image: $selectedImage)
+            }
         }
     }
 
     private func addCard() {
+        let imageData = selectedImage?.jpegData(compressionQuality: 0.8)
+        let trimmedUrl = url.trimmingCharacters(in: .whitespaces)
         let card = Card(
             chord1: side1.trimmingCharacters(in: .whitespaces),
             chord2: side2.trimmingCharacters(in: .whitespaces),
-            deck: deck
+            deck: deck,
+            imageData: imageData,
+            url: trimmedUrl.isEmpty ? nil : trimmedUrl
         )
         deck.cards.append(card)
         modelContext.insert(card)
@@ -148,11 +188,20 @@ struct EditCardView: View {
 
     @State private var side1: String
     @State private var side2: String
+    @State private var url: String
+    @State private var selectedImage: UIImage?
+    @State private var showingImagePicker = false
 
     init(card: Card) {
         self.card = card
         _side1 = State(initialValue: card.chord1)
         _side2 = State(initialValue: card.chord2)
+        _url = State(initialValue: card.url ?? "")
+        if let imageData = card.imageData, let image = UIImage(data: imageData) {
+            _selectedImage = State(initialValue: image)
+        } else {
+            _selectedImage = State(initialValue: nil)
+        }
     }
 
     var body: some View {
@@ -160,7 +209,37 @@ struct EditCardView: View {
             Form {
                 Section {
                     TextField("Side 1", text: $side1)
-                    TextField("Side 2", text: $side2)
+                    if card.deck?.side2Enabled == true {
+                        TextField("Side 2", text: $side2)
+                    }
+                }
+
+                if card.deck?.imagesEnabled == true {
+                    Section("Image") {
+                        if let image = selectedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 200)
+                        }
+                        Button(selectedImage == nil ? "Add Image" : "Change Image") {
+                            showingImagePicker = true
+                        }
+                        if selectedImage != nil {
+                            Button("Remove Image", role: .destructive) {
+                                selectedImage = nil
+                            }
+                        }
+                    }
+                }
+
+                if card.deck?.urlEnabled == true {
+                    Section("URL") {
+                        TextField("URL", text: $url)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocapitalization(.none)
+                    }
                 }
             }
             .navigationTitle("Edit Card")
@@ -178,13 +257,19 @@ struct EditCardView: View {
                     .disabled(side1.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(image: $selectedImage)
+            }
         }
     }
 
     private func saveCard() {
         card.chord1 = side1.trimmingCharacters(in: .whitespaces)
         card.chord2 = side2.trimmingCharacters(in: .whitespaces)
-        card.name = "\(card.chord1) ↔ \(card.chord2)"
+        card.name = card.chord2.isEmpty ? card.chord1 : "\(card.chord1) ↔ \(card.chord2)"
+        card.imageData = selectedImage?.jpegData(compressionQuality: 0.8)
+        let trimmedUrl = url.trimmingCharacters(in: .whitespaces)
+        card.url = trimmedUrl.isEmpty ? nil : trimmedUrl
         dismiss()
     }
 }
@@ -195,8 +280,17 @@ struct CardRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(card.name)
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text(card.chord1)
+                        .font(.headline)
+                    if !card.chord2.isEmpty {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(card.chord2)
+                            .font(.headline)
+                    }
+                }
 
                 Spacer()
 
@@ -250,6 +344,42 @@ struct BPMBadge: View {
         .background(color.opacity(0.2))
         .foregroundStyle(color)
         .cornerRadius(4)
+    }
+}
+
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.image = image
+            }
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true)
+        }
     }
 }
 

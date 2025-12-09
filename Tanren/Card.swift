@@ -39,9 +39,13 @@ enum PracticeStage: Int, CaseIterable {
 
 @Model
 final class Card {
-    var name: String
-    var chord1: String
-    var chord2: String
+    var name: String = ""
+    var chord1: String = ""
+    var chord2: String = ""
+
+    // Optional image and URL
+    @Attribute(.externalStorage) var imageData: Data?
+    var url: String?
 
     // BPM tracking for each stage - nil means not yet established
     var comfortableBPM: Int?
@@ -50,18 +54,20 @@ final class Card {
 
     // Spaced repetition fields
     var lastReviewDate: Date?
-    var nextReviewDate: Date
-    var easeFactor: Double
-    var intervalDays: Int
-    var reviewCount: Int
+    var nextReviewDate: Date = Date()
+    var easeFactor: Double = 2.5
+    var intervalDays: Int = 1
+    var reviewCount: Int = 0
 
     var deck: Deck?
 
-    init(chord1: String, chord2: String, deck: Deck? = nil) {
+    init(chord1: String, chord2: String, deck: Deck? = nil, imageData: Data? = nil, url: String? = nil) {
         self.chord1 = chord1
         self.chord2 = chord2
-        self.name = "\(chord1) ↔ \(chord2)"
+        self.name = chord2.isEmpty ? chord1 : "\(chord1) ↔ \(chord2)"
         self.deck = deck
+        self.imageData = imageData
+        self.url = url
 
         // BPM starts unestablished
         self.comfortableBPM = nil

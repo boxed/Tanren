@@ -97,14 +97,36 @@ struct PracticeView: View {
                 Text(card.chord1)
                     .font(.system(size: 48, weight: .bold))
 
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 24))
-                    .foregroundStyle(.secondary)
+                if !card.chord2.isEmpty {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
 
-                Text(card.chord2)
-                    .font(.system(size: 48, weight: .bold))
+                    Text(card.chord2)
+                        .font(.system(size: 48, weight: .bold))
+                }
             }
             .padding(.top, 8)
+
+            // Card image
+            if deck.imagesEnabled, let imageData = card.imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 200)
+                    .cornerRadius(8)
+            }
+
+            // Card URL
+            if deck.urlEnabled, let urlString = card.url, let url = URL(string: urlString) {
+                Link(destination: url) {
+                    HStack {
+                        Image(systemName: "link")
+                        Text(url.host ?? urlString)
+                    }
+                    .font(.subheadline)
+                }
+            }
 
             if deck.metronomeEnabled {
                 // Stage indicator

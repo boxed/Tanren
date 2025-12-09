@@ -9,8 +9,7 @@ import SwiftData
 struct DeckListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var decks: [Deck]
-    @State private var showingNewDeckAlert = false
-    @State private var newDeckName = ""
+    @State private var showingNewDeckSheet = false
 
     var body: some View {
         List {
@@ -24,37 +23,89 @@ struct DeckListView: View {
         .navigationTitle("Tanren")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingNewDeckAlert = true }) {
+                Button(action: { showingNewDeckSheet = true }) {
                     Label("Add Deck", systemImage: "plus")
                 }
             }
         }
-        .alert("New Deck", isPresented: $showingNewDeckAlert) {
-            TextField("Deck name", text: $newDeckName)
-            Button("Cancel", role: .cancel) {
-                newDeckName = ""
-            }
-            Button("Create") {
-                addDeck()
-            }
+        .sheet(isPresented: $showingNewDeckSheet) {
+            NewDeckView()
         }
         .onAppear {
             DataSeeder.seedIfNeeded(modelContext: modelContext)
         }
     }
 
-    private func addDeck() {
-        let name = newDeckName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        let newDeck = Deck(name: name)
-        modelContext.insert(newDeck)
-        newDeckName = ""
-    }
-
     private func deleteDecks(offsets: IndexSet) {
         for index in offsets {
             modelContext.delete(decks[index])
         }
+    }
+}
+
+struct NewDeckView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var deckName = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Deck name", text: $deckName)
+                }
+
+                Section("Presets") {
+                    Button("Chord Changes") {
+                        createChordChangesDeck()
+                    }
+                }
+            }
+            .navigationTitle("New Deck")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Create") {
+                        createEmptyDeck()
+                    }
+                    .disabled(deckName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func createEmptyDeck() {
+        let name = deckName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let newDeck = Deck(name: name)
+        modelContext.insert(newDeck)
+        dismiss()
+    }
+
+    private func createChordChangesDeck() {
+        let basicChords = ["A", "B", "C", "D", "E", "F", "G", "Am", "Em"]
+        let deck = Deck(name: "Chord Changes")
+        modelContext.insert(deck)
+
+        for i in 0..<basicChords.count {
+            for j in (i + 1)..<basicChords.count {
+                let card = Card(
+                    chord1: basicChords[i],
+                    chord2: basicChords[j],
+                    deck: deck
+                )
+                modelContext.insert(card)
+                deck.cards.append(card)
+            }
+        }
+
+        try? modelContext.save()
+        dismiss()
     }
 }
 

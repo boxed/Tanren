@@ -8,13 +8,24 @@ import SwiftData
 
 @Model
 final class Deck {
-    var name: String
+    var name: String = ""
     var metronomeEnabled: Bool = true
-    @Relationship(deleteRule: .cascade, inverse: \Card.deck) var cards: [Card]
+    var side2Enabled: Bool = true
+    var imagesEnabled: Bool = false
+    var urlEnabled: Bool = false
+    @Relationship(deleteRule: .cascade, inverse: \Card.deck) var cardsRelation: [Card]?
 
-    init(name: String, metronomeEnabled: Bool = true) {
+    var cards: [Card] {
+        get { cardsRelation ?? [] }
+        set { cardsRelation = newValue }
+    }
+
+    init(name: String, metronomeEnabled: Bool = true, side2Enabled: Bool = true, imagesEnabled: Bool = false, urlEnabled: Bool = false) {
         self.name = name
         self.metronomeEnabled = metronomeEnabled
-        self.cards = []
+        self.side2Enabled = side2Enabled
+        self.imagesEnabled = imagesEnabled
+        self.urlEnabled = urlEnabled
+        self.cardsRelation = []
     }
 }

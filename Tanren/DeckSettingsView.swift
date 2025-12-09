@@ -22,6 +22,14 @@ struct DeckSettingsView: View {
                 } footer: {
                     Text("When disabled, practice sessions won't show the metronome or BPM controls.")
                 }
+
+                Section {
+                    Toggle("Side 2", isOn: $deck.side2Enabled)
+                    Toggle("Images", isOn: $deck.imagesEnabled)
+                    Toggle("URLs", isOn: $deck.urlEnabled)
+                } footer: {
+                    Text("Configure which fields are available for cards in this deck.")
+                }
             }
             .navigationTitle("Deck Settings")
             .navigationBarTitleDisplayMode(.inline)
