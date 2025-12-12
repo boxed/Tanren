@@ -364,8 +364,6 @@ struct PracticeView: View {
     }
 
     private func completeStage(card: Card) {
-        metronome.stop()
-
         // Save the BPM for this stage
         card.setBPM(metronome.bpm, for: currentStage)
 

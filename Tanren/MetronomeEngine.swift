@@ -24,6 +24,7 @@ class MetronomeEngine: ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
     private var clickBuffer: AVAudioPCMBuffer?
+    private var quietClickBuffer: AVAudioPCMBuffer?
     private var timer: Timer?
 
     private let sampleRate: Double = 44100
@@ -52,8 +53,9 @@ class MetronomeEngine: ObservableObject {
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
 
-        // Generate click sound buffer
-        clickBuffer = generateClickBuffer(format: format)
+        // Generate click sound buffers
+        clickBuffer = generateClickBuffer(format: format, volume: 1.0)
+        quietClickBuffer = generateClickBuffer(format: format, volume: 0.5)
 
         do {
             try audioEngine.start()
@@ -71,7 +73,7 @@ class MetronomeEngine: ObservableObject {
         }
     }
 
-    private func generateClickBuffer(format: AVAudioFormat) -> AVAudioPCMBuffer? {
+    private func generateClickBuffer(format: AVAudioFormat, volume: Float) -> AVAudioPCMBuffer? {
         let frameCount = AVAudioFrameCount(sampleRate * clickDuration)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             return nil
@@ -102,7 +104,7 @@ class MetronomeEngine: ObservableObject {
                 sample = sample - hipass * channelData[frame - 1] * 0.1
             }
 
-            channelData[frame] = sample * 0.6
+            channelData[frame] = sample * 0.6 * volume
         }
 
         return buffer
@@ -162,7 +164,15 @@ class MetronomeEngine: ObservableObject {
 
         currentBeat = (currentBeat % beatsPerMeasure) + 1
 
-        playerNode.scheduleBuffer(clickBuffer, at: nil, options: [], completionHandler: nil)
+        // At high BPM (200+), play every 4th beat at full volume, others at half volume
+        let buffer: AVAudioPCMBuffer
+        if bpm >= 200 && currentBeat != 1 {
+            buffer = quietClickBuffer ?? clickBuffer
+        } else {
+            buffer = clickBuffer
+        }
+
+        playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
         if !playerNode.isPlaying {
             playerNode.play()
         }
