@@ -545,13 +545,16 @@ struct PracticeView: View {
 
     private func completeStage(card: Card) {
         // Save the BPM for this stage
-        card.setBPM(metronome.bpm, for: currentStage)
+        let completedBPM = metronome.bpm
+        card.setBPM(completedBPM, for: currentStage)
 
         // Move to next stage or next card
         if let nextStage = PracticeStage(rawValue: currentStage.rawValue + 1) {
-            // Move to next stage
+            // Move to next stage - at least 10 BPM higher than completed stage
             currentStage = nextStage
-            metronome.setBPM(card.startingBPM(for: nextStage))
+            let minimumBPM = completedBPM + 10
+            let nextBPM = max(card.startingBPM(for: nextStage), minimumBPM)
+            metronome.setBPM(nextBPM)
         } else {
             // Completed all stages - finish this card's review
             SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: true)
