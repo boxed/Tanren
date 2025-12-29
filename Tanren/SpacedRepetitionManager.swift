@@ -56,8 +56,8 @@ struct SpacedRepetitionManager {
     /// Selects cards for practice from a deck
     /// Prioritizes due cards and weak spots, but includes some randomness
     static func selectCardsForPractice(from deck: Deck, maxCards: Int = 10) -> [Card] {
-        // Exclude cards already practiced today
-        let allCards = deck.cards.filter { !$0.wasPracticedToday }
+        // Exclude suspended cards and cards already practiced today
+        let allCards = deck.cards.filter { !$0.isSuspended && !$0.wasPracticedToday }
 
         // Reduce max cards by how many were already done today
         let remainingQuota = max(0, maxCards - cardsPracticedToday(in: deck))

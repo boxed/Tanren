@@ -61,6 +61,13 @@ final class Card {
 
     var deck: Deck?
 
+    // Suspended cards are excluded from practice
+    var isSuspended: Bool = false
+
+    // Interval timer fields
+    var intervalTimerSeconds: String = ""  // Comma separated seconds, e.g., "10, 50"
+    var intervalTimerReps: Int = 1         // Number of repetitions
+
     init(chord1: String, chord2: String, deck: Deck? = nil, imageData: Data? = nil, url: String? = nil) {
         self.chord1 = chord1
         self.chord2 = chord2
@@ -153,5 +160,29 @@ final class Card {
         }
 
         return score
+    }
+
+    /// Parses intervalTimerSeconds into an array of integers
+    var parsedIntervalSeconds: [Int] {
+        intervalTimerSeconds
+            .split(separator: ",")
+            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0 > 0 }
+    }
+
+    /// Returns the full list of intervals (seconds repeated by reps)
+    var intervalTimerList: [Int] {
+        let baseIntervals = parsedIntervalSeconds
+        guard !baseIntervals.isEmpty else { return [] }
+        var result: [Int] = []
+        for _ in 0..<max(1, intervalTimerReps) {
+            result.append(contentsOf: baseIntervals)
+        }
+        return result
+    }
+
+    /// Total time in seconds for the interval timer
+    var intervalTimerTotalSeconds: Int {
+        intervalTimerList.reduce(0, +)
     }
 }

@@ -24,6 +24,12 @@ struct DeckSettingsView: View {
                 }
 
                 Section {
+                    Toggle("Interval Timers", isOn: $deck.intervalTimersEnabled)
+                } footer: {
+                    Text("Enable timed interval practice with configurable work/rest periods per card.")
+                }
+
+                Section {
                     Toggle("Side 2", isOn: $deck.side2Enabled)
                     Toggle("Images", isOn: $deck.imagesEnabled)
                     Toggle("URLs", isOn: $deck.urlEnabled)

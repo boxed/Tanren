@@ -42,6 +42,9 @@ struct DeckDetailView: View {
                         CardRowView(card: card)
                     }
                     .buttonStyle(.plain)
+                    .onLongPressGesture {
+                        cardToEdit = card
+                    }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             deleteCard(card)
@@ -56,6 +59,17 @@ struct DeckDetailView: View {
                             Label("Edit", systemImage: "pencil")
                         }
                         .tint(.blue)
+
+                        Button {
+                            card.isSuspended.toggle()
+                        } label: {
+                            if card.isSuspended {
+                                Label("Unsuspend", systemImage: "play.circle")
+                            } else {
+                                Label("Suspend", systemImage: "pause.circle")
+                            }
+                        }
+                        .tint(card.isSuspended ? .green : .orange)
                     }
                 }
             }
@@ -106,6 +120,8 @@ struct AddCardView: View {
     @State private var url = ""
     @State private var selectedImage: UIImage?
     @State private var showingImagePicker = false
+    @State private var intervalTimerSeconds = ""
+    @State private var intervalTimerReps = 1
 
     var body: some View {
         NavigationStack {
@@ -144,6 +160,18 @@ struct AddCardView: View {
                             .autocapitalization(.none)
                     }
                 }
+
+                if deck.intervalTimersEnabled {
+                    Section {
+                        TextField("Seconds (comma separated)", text: $intervalTimerSeconds)
+                            .keyboardType(.numbersAndPunctuation)
+                        Stepper("Reps: \(intervalTimerReps)", value: $intervalTimerReps, in: 1...100)
+                    } header: {
+                        Text("Interval Timer")
+                    } footer: {
+                        Text("Example: \"10, 50\" with 3 reps creates: 10s, 50s, 10s, 50s, 10s, 50s")
+                    }
+                }
             }
             .navigationTitle("Add Card")
             .navigationBarTitleDisplayMode(.inline)
@@ -176,6 +204,8 @@ struct AddCardView: View {
             imageData: imageData,
             url: trimmedUrl.isEmpty ? nil : trimmedUrl
         )
+        card.intervalTimerSeconds = intervalTimerSeconds.trimmingCharacters(in: .whitespaces)
+        card.intervalTimerReps = intervalTimerReps
         deck.cards.append(card)
         modelContext.insert(card)
         dismiss()
@@ -191,12 +221,16 @@ struct EditCardView: View {
     @State private var url: String
     @State private var selectedImage: UIImage?
     @State private var showingImagePicker = false
+    @State private var intervalTimerSeconds: String
+    @State private var intervalTimerReps: Int
 
     init(card: Card) {
         self.card = card
         _side1 = State(initialValue: card.chord1)
         _side2 = State(initialValue: card.chord2)
         _url = State(initialValue: card.url ?? "")
+        _intervalTimerSeconds = State(initialValue: card.intervalTimerSeconds)
+        _intervalTimerReps = State(initialValue: card.intervalTimerReps)
         if let imageData = card.imageData, let image = UIImage(data: imageData) {
             _selectedImage = State(initialValue: image)
         } else {
@@ -241,6 +275,18 @@ struct EditCardView: View {
                             .autocapitalization(.none)
                     }
                 }
+
+                if card.deck?.intervalTimersEnabled == true {
+                    Section {
+                        TextField("Seconds (comma separated)", text: $intervalTimerSeconds)
+                            .keyboardType(.numbersAndPunctuation)
+                        Stepper("Reps: \(intervalTimerReps)", value: $intervalTimerReps, in: 1...100)
+                    } header: {
+                        Text("Interval Timer")
+                    } footer: {
+                        Text("Example: \"10, 50\" with 3 reps creates: 10s, 50s, 10s, 50s, 10s, 50s")
+                    }
+                }
             }
             .navigationTitle("Edit Card")
             .navigationBarTitleDisplayMode(.inline)
@@ -270,6 +316,8 @@ struct EditCardView: View {
         card.imageData = selectedImage?.jpegData(compressionQuality: 0.8)
         let trimmedUrl = url.trimmingCharacters(in: .whitespaces)
         card.url = trimmedUrl.isEmpty ? nil : trimmedUrl
+        card.intervalTimerSeconds = intervalTimerSeconds.trimmingCharacters(in: .whitespaces)
+        card.intervalTimerReps = intervalTimerReps
         dismiss()
     }
 }
@@ -294,7 +342,11 @@ struct CardRowView: View {
 
                 Spacer()
 
-                if card.isDue {
+                if card.isSuspended {
+                    Image(systemName: "pause.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                } else if card.isDue {
                     Image(systemName: "clock.fill")
                         .foregroundStyle(.orange)
                         .font(.caption)
@@ -323,6 +375,7 @@ struct CardRowView: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        .opacity(card.isSuspended ? 0.5 : 1.0)
     }
 }
 
