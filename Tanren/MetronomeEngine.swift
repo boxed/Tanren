@@ -27,6 +27,10 @@ class MetronomeEngine: ObservableObject {
     private var quietClickBuffer: AVAudioPCMBuffer?
     private var timer: Timer?
 
+    // Timing based on elapsed time to prevent drift
+    private var startTime: Date?
+    private var lastPlayedBeat: Int = -1
+
     private let sampleRate: Double = 44100
     private let clickDuration: Double = 0.05 // 50ms click
 
@@ -114,6 +118,8 @@ class MetronomeEngine: ObservableObject {
         guard !isPlaying else { return }
         isPlaying = true
         currentBeat = 0
+        lastPlayedBeat = -1
+        startTime = Date()
         scheduleBeats()
     }
 
@@ -123,6 +129,8 @@ class MetronomeEngine: ObservableObject {
         timer = nil
         playerNode?.stop()
         currentBeat = 0
+        startTime = nil
+        lastPlayedBeat = -1
     }
 
     func toggle() {
@@ -146,23 +154,38 @@ class MetronomeEngine: ObservableObject {
     }
 
     private func scheduleBeats() {
-        let interval = 60.0 / Double(bpm)
-
-        // Play first beat immediately
-        playClick()
-
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        // Use a high-frequency timer to check if we should play a beat
+        // This prevents drift by calculating beat position from elapsed time
+        timer = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                self.playClick()
+                self.checkAndPlayBeat()
             }
+        }
+
+        // Play first beat immediately
+        lastPlayedBeat = 0
+        currentBeat = 1
+        playClick()
+    }
+
+    private func checkAndPlayBeat() {
+        guard isPlaying, let startTime = startTime else { return }
+
+        let elapsed = Date().timeIntervalSince(startTime)
+        let beatInterval = 60.0 / Double(bpm)
+        let currentBeatNumber = Int(elapsed / beatInterval)
+
+        // Only play if we've moved to a new beat
+        if currentBeatNumber > lastPlayedBeat {
+            lastPlayedBeat = currentBeatNumber
+            currentBeat = (currentBeatNumber % beatsPerMeasure) + 1
+            playClick()
         }
     }
 
     private func playClick() {
-        guard isPlaying, let playerNode = playerNode, let clickBuffer = clickBuffer else { return }
-
-        currentBeat = (currentBeat % beatsPerMeasure) + 1
+        guard let playerNode = playerNode, let clickBuffer = clickBuffer else { return }
 
         // At high BPM (200+), play every 4th beat at full volume, others at half volume
         let buffer: AVAudioPCMBuffer

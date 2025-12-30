@@ -20,6 +20,12 @@ class IntervalTimerEngine: ObservableObject {
     private var timer: Timer?
     private var hasStartedOnce = false               // Track if we've ever started
 
+    // Timing based on elapsed time to prevent drift
+    private var countInStartTime: Date?
+    private var timerStartTime: Date?
+    private var totalIntervalTime: Int = 0           // Sum of all intervals
+    private var lastProcessedSecond: Int = -1        // Track last second to avoid duplicate sounds
+
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
     private var transitionBuffer: AVAudioPCMBuffer?
@@ -135,6 +141,7 @@ class IntervalTimerEngine: ObservableObject {
 
     func configure(intervals: [Int]) {
         self.intervals = intervals
+        self.totalIntervalTime = intervals.reduce(0, +)
         reset()
     }
 
@@ -145,9 +152,14 @@ class IntervalTimerEngine: ObservableObject {
         isCountingIn = false
         countInRemaining = countInDuration
         hasStartedOnce = false
+        countInStartTime = nil
+        timerStartTime = nil
+        lastProcessedSecond = -1
+        pausedCountInElapsed = 0
+        pausedTimerElapsed = 0
         if !intervals.isEmpty {
             currentIntervalRemaining = intervals[0]
-            totalRemaining = intervals.reduce(0, +)
+            totalRemaining = totalIntervalTime
         } else {
             currentIntervalRemaining = 0
             totalRemaining = 0
@@ -163,9 +175,19 @@ class IntervalTimerEngine: ObservableObject {
             hasStartedOnce = true
             isCountingIn = true
             countInRemaining = countInDuration
+            countInStartTime = Date()
+            pausedCountInElapsed = 0
+            pausedTimerElapsed = 0
+        } else if isCountingIn {
+            // Resuming during count-in - restore start time based on paused elapsed
+            countInStartTime = Date().addingTimeInterval(-pausedCountInElapsed)
+        } else {
+            // Resuming during main timer - restore start time based on paused elapsed
+            timerStartTime = Date().addingTimeInterval(-pausedTimerElapsed)
         }
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Use higher frequency timer for more accurate timing
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
                 self.tick()
@@ -173,7 +195,17 @@ class IntervalTimerEngine: ObservableObject {
         }
     }
 
+    private var pausedCountInElapsed: TimeInterval = 0
+    private var pausedTimerElapsed: TimeInterval = 0
+
     func pause() {
+        // Save elapsed time so we can restore on resume
+        if isCountingIn, let countInStartTime = countInStartTime {
+            pausedCountInElapsed = Date().timeIntervalSince(countInStartTime)
+        } else if let timerStartTime = timerStartTime {
+            pausedTimerElapsed = Date().timeIntervalSince(timerStartTime)
+        }
+
         isRunning = false
         timer?.invalidate()
         timer = nil
@@ -197,37 +229,90 @@ class IntervalTimerEngine: ObservableObject {
 
         // Handle count-in phase
         if isCountingIn {
-            countInRemaining -= 1
+            guard let countInStartTime = countInStartTime else { return }
+            let elapsed = Date().timeIntervalSince(countInStartTime)
+            let elapsedSeconds = Int(elapsed)
+            let newCountInRemaining = max(0, countInDuration - elapsedSeconds)
 
-            // Play beep on each second during count-in
-            if countInRemaining > 0 {
-                playCountInBeep()
+            // Only process each second once
+            if elapsedSeconds != lastProcessedSecond {
+                lastProcessedSecond = elapsedSeconds
+
+                // Play beep on each second during count-in (except the last)
+                if newCountInRemaining > 0 {
+                    playCountInBeep()
+                }
             }
 
-            if countInRemaining <= 0 {
+            countInRemaining = newCountInRemaining
+
+            if elapsed >= Double(countInDuration) {
                 // Count-in finished, start the actual timer
                 isCountingIn = false
+                timerStartTime = Date()
+                lastProcessedSecond = -1
                 playTransitionBeep()  // Louder beep to signal start
             }
             return
         }
 
-        currentIntervalRemaining -= 1
-        totalRemaining -= 1
+        // Main timer phase
+        guard let timerStartTime = timerStartTime else { return }
+        let elapsed = Date().timeIntervalSince(timerStartTime)
+        let elapsedSeconds = Int(elapsed)
 
-        if currentIntervalRemaining <= 0 {
-            // Current interval finished
-            if currentIntervalIndex < intervals.count - 1 {
-                // Move to next interval
-                currentIntervalIndex += 1
-                currentIntervalRemaining = intervals[currentIntervalIndex]
-                playTransitionBeep()
-            } else {
-                // All intervals complete
-                isComplete = true
-                pause()
-                playCompletionBeep()
+        // Calculate total remaining
+        let newTotalRemaining = max(0, totalIntervalTime - elapsedSeconds)
+
+        // Find which interval we're in and remaining time
+        var accumulatedTime = 0
+        var newIntervalIndex = 0
+        var newIntervalRemaining = 0
+
+        for (index, intervalDuration) in intervals.enumerated() {
+            if elapsedSeconds < accumulatedTime + intervalDuration {
+                newIntervalIndex = index
+                newIntervalRemaining = (accumulatedTime + intervalDuration) - elapsedSeconds
+                break
             }
+            accumulatedTime += intervalDuration
+            newIntervalIndex = index
+        }
+
+        // Detect interval transitions (only process each second once)
+        if elapsedSeconds != lastProcessedSecond {
+            let previousSecond = lastProcessedSecond
+            lastProcessedSecond = elapsedSeconds
+
+            // Check if we crossed into a new interval
+            if previousSecond >= 0 {
+                var prevAccumulated = 0
+                var prevIntervalIndex = 0
+                for (index, intervalDuration) in intervals.enumerated() {
+                    if previousSecond < prevAccumulated + intervalDuration {
+                        prevIntervalIndex = index
+                        break
+                    }
+                    prevAccumulated += intervalDuration
+                    prevIntervalIndex = index
+                }
+
+                if newIntervalIndex > prevIntervalIndex && newTotalRemaining > 0 {
+                    playTransitionBeep()
+                }
+            }
+        }
+
+        // Update published values
+        totalRemaining = newTotalRemaining
+        currentIntervalIndex = newIntervalIndex
+        currentIntervalRemaining = newIntervalRemaining
+
+        // Check for completion
+        if elapsed >= Double(totalIntervalTime) {
+            isComplete = true
+            pause()
+            playCompletionBeep()
         }
     }
 
