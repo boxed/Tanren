@@ -23,6 +23,7 @@ struct PracticeView: View {
     @State private var showBuryConfirmation = false
     @State private var showSuspendConfirmation = false
     @State private var showTuner = false
+    @State private var stageCompletedForCurrentCard = false
 
     init(deck: Deck, startingCard: Card? = nil) {
         self.deck = deck
@@ -61,6 +62,11 @@ struct PracticeView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Done") {
+                        // Record review if any stage was completed for current card
+                        if stageCompletedForCurrentCard, let card = currentCard {
+                            SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: currentStage == .challenge)
+                            try? modelContext.save()
+                        }
                         metronome.stop()
                         intervalTimer.stop()
                         dismiss()
@@ -206,6 +212,7 @@ struct PracticeView: View {
 
         // Reset to comfortable stage for the new current card
         currentStage = .comfortable
+        stageCompletedForCurrentCard = false
 
         if currentCardIndex >= practiceCards.count {
             sessionComplete = true
@@ -230,6 +237,7 @@ struct PracticeView: View {
 
         // Reset to comfortable stage for the new current card
         currentStage = .comfortable
+        stageCompletedForCurrentCard = false
 
         if currentCardIndex >= practiceCards.count {
             sessionComplete = true
@@ -547,6 +555,7 @@ struct PracticeView: View {
         // Save the BPM for this stage
         let completedBPM = metronome.bpm
         card.setBPM(completedBPM, for: currentStage)
+        stageCompletedForCurrentCard = true
 
         // Move to next stage or next card
         if let nextStage = PracticeStage(rawValue: currentStage.rawValue + 1) {
@@ -563,6 +572,7 @@ struct PracticeView: View {
             // Move to next card
             currentCardIndex += 1
             currentStage = .comfortable
+            stageCompletedForCurrentCard = false
 
             if currentCardIndex >= practiceCards.count {
                 sessionComplete = true
