@@ -575,6 +575,7 @@ struct PracticeView: View {
             stageCompletedForCurrentCard = false
 
             if currentCardIndex >= practiceCards.count {
+                metronome.stop()
                 sessionComplete = true
             } else if let nextCard = currentCard {
                 metronome.setBPM(nextCard.startingBPM(for: .comfortable))
