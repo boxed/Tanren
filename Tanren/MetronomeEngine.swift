@@ -23,8 +23,7 @@ class MetronomeEngine: ObservableObject {
 
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
-    private var clickBuffer: AVAudioPCMBuffer?
-    private var quietClickBuffer: AVAudioPCMBuffer?
+    private var clickBuffers: [AVAudioPCMBuffer] = []  // Beat 1-4 with decreasing volumes
     private var timer: Timer?
 
     // Timing based on elapsed time to prevent drift
@@ -57,9 +56,13 @@ class MetronomeEngine: ObservableObject {
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
 
-        // Generate click sound buffers
-        clickBuffer = generateClickBuffer(format: format, volume: 1.0)
-        quietClickBuffer = generateClickBuffer(format: format, volume: 0.5)
+        // Generate click sound buffers with decreasing volumes for beats 1-4
+        let volumes: [Float] = [1.0, 0.7, 0.5, 0.35]
+        for volume in volumes {
+            if let buffer = generateClickBuffer(format: format, volume: volume) {
+                clickBuffers.append(buffer)
+            }
+        }
 
         do {
             try audioEngine.start()
@@ -185,15 +188,11 @@ class MetronomeEngine: ObservableObject {
     }
 
     private func playClick() {
-        guard let playerNode = playerNode, let clickBuffer = clickBuffer else { return }
+        guard let playerNode = playerNode, !clickBuffers.isEmpty else { return }
 
-        // At high BPM (200+), play every 4th beat at full volume, others at half volume
-        let buffer: AVAudioPCMBuffer
-        if bpm >= 200 && currentBeat != 1 {
-            buffer = quietClickBuffer ?? clickBuffer
-        } else {
-            buffer = clickBuffer
-        }
+        // Use buffer corresponding to current beat (1-4 mapped to index 0-3)
+        let bufferIndex = min(currentBeat - 1, clickBuffers.count - 1)
+        let buffer = clickBuffers[max(0, bufferIndex)]
 
         playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
         if !playerNode.isPlaying {
