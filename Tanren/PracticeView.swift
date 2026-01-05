@@ -74,10 +74,39 @@ struct PracticeView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Text("\(currentCardIndex + 1)/\(practiceCards.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Text("\(currentCardIndex + 1)/\(practiceCards.count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Menu {
+                            Button("Bury card") {
+                                showBuryConfirmation = true
+                            }
+                            Button("Suspend card", role: .destructive) {
+                                showSuspendConfirmation = true
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
                 }
+            }
+            .confirmationDialog("Bury this card?", isPresented: $showBuryConfirmation, titleVisibility: .visible) {
+                Button("Bury", role: .destructive) {
+                    buryCurrentCard()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This card will be moved to the end of the practice session.")
+            }
+            .confirmationDialog("Suspend this card?", isPresented: $showSuspendConfirmation, titleVisibility: .visible) {
+                Button("Suspend", role: .destructive) {
+                    suspendCurrentCard()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This card will be excluded from all future practice sessions until unsuspended.")
             }
             .onAppear {
                 // Keep screen on during practice
@@ -158,38 +187,6 @@ struct PracticeView: View {
             }
 
             Spacer()
-
-            // Bury and Suspend buttons
-            HStack(spacing: 24) {
-                Button("Bury card") {
-                    showBuryConfirmation = true
-                }
-                .font(.subheadline)
-                .confirmationDialog("Bury this card?", isPresented: $showBuryConfirmation, titleVisibility: .visible) {
-                    Button("Bury", role: .destructive) {
-                        buryCurrentCard()
-                    }
-                    Button("Cancel", role: .cancel) { }
-                } message: {
-                    Text("This card will be moved to the end of the practice session.")
-                }
-
-                Button("Suspend card") {
-                    showSuspendConfirmation = true
-                }
-                .font(.subheadline)
-                .foregroundStyle(.orange)
-                .confirmationDialog("Suspend this card?", isPresented: $showSuspendConfirmation, titleVisibility: .visible) {
-                    Button("Suspend", role: .destructive) {
-                        suspendCurrentCard()
-                    }
-                    Button("Cancel", role: .cancel) { }
-                } message: {
-                    Text("This card will be excluded from all future practice sessions until unsuspended.")
-                }
-            }
-            .padding(.bottom)
-
 
             // Stage action button
             stageActionView(card: card)
