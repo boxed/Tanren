@@ -25,6 +25,7 @@ class IntervalTimerEngine: ObservableObject {
     private var timerStartTime: Date?
     private var totalIntervalTime: Int = 0           // Sum of all intervals
     private var lastProcessedSecond: Int = -1        // Track last second to avoid duplicate sounds
+    private var lastCountdownBeepPlayed: Int = 0     // Track countdown beeps (3, 2, 1) before intervals
 
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
@@ -102,8 +103,8 @@ class IntervalTimerEngine: ObservableObject {
     }
 
     private func generateCompletionBuffer(format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        // Two ascending tones for completion
-        let duration = 0.4
+        // Double-beep: two identical tones at same frequency
+        let duration = 0.35
         let frameCount = AVAudioFrameCount(sampleRate * duration)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             return nil
@@ -113,24 +114,23 @@ class IntervalTimerEngine: ObservableObject {
 
         guard let channelData = buffer.floatChannelData?[0] else { return nil }
 
-        let freq1 = 660.0  // E5
-        let freq2 = 880.0  // A5
+        let freq = 880.0  // High A
 
         for frame in 0..<Int(frameCount) {
             let t = Double(frame) / sampleRate
 
-            // First tone: 0-0.15s, second tone: 0.2-0.4s
+            // First beep: 0-0.12s, second beep: 0.18-0.30s
             var sample: Float = 0
 
-            if t < 0.15 {
+            if t < 0.12 {
                 let fadeIn = min(1.0, t / 0.01)
-                let fadeOut = min(1.0, (0.15 - t) / 0.02)
-                sample = Float(sin(2.0 * .pi * freq1 * t)) * Float(fadeIn * fadeOut) * 0.5
-            } else if t >= 0.2 {
-                let localT = t - 0.2
+                let fadeOut = min(1.0, (0.12 - t) / 0.02)
+                sample = Float(sin(2.0 * .pi * freq * t)) * Float(fadeIn * fadeOut) * 0.5
+            } else if t >= 0.18 && t < 0.30 {
+                let localT = t - 0.18
                 let fadeIn = min(1.0, localT / 0.01)
-                let fadeOut = min(1.0, (0.2 - localT) / 0.02)
-                sample = Float(sin(2.0 * .pi * freq2 * t)) * Float(fadeIn * fadeOut) * 0.5
+                let fadeOut = min(1.0, (0.12 - localT) / 0.02)
+                sample = Float(sin(2.0 * .pi * freq * t)) * Float(fadeIn * fadeOut) * 0.5
             }
 
             channelData[frame] = sample
@@ -155,6 +155,7 @@ class IntervalTimerEngine: ObservableObject {
         countInStartTime = nil
         timerStartTime = nil
         lastProcessedSecond = -1
+        lastCountdownBeepPlayed = 0
         pausedCountInElapsed = 0
         pausedTimerElapsed = 0
         if !intervals.isEmpty {
@@ -299,6 +300,15 @@ class IntervalTimerEngine: ObservableObject {
 
                 if newIntervalIndex > prevIntervalIndex && newTotalRemaining > 0 {
                     playTransitionBeep()
+                    lastCountdownBeepPlayed = 0  // Reset countdown tracking for new interval
+                }
+            }
+
+            // Play countdown beeps (3, 2, 1) before interval ends (if not the last interval)
+            if newIntervalRemaining <= 3 && newIntervalRemaining > 0 && newIntervalIndex < intervals.count - 1 {
+                if newIntervalRemaining != lastCountdownBeepPlayed {
+                    lastCountdownBeepPlayed = newIntervalRemaining
+                    playCountInBeep()  // Reuse count-in beep for countdown
                 }
             }
         }

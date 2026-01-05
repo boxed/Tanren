@@ -104,8 +104,8 @@ struct PracticeView: View {
 
     private func practiceContentView(card: Card) -> some View {
         VStack(spacing: 16) {
-            // Card display - horizontal layout
-            HStack(spacing: 12) {
+                // Card display - horizontal layout
+                HStack(spacing: 12) {
                 Text(card.chord1)
                     .font(.system(size: 48, weight: .bold))
 
@@ -146,11 +146,8 @@ struct PracticeView: View {
             }
 
             if deck.metronomeEnabled {
-                // Stage indicator
-                stageIndicatorView
-
-                // Current BPM levels for this card
-                bpmLevelsView(card: card)
+                // Stage indicator with BPM levels
+                stageIndicatorView(card: card)
             }
 
             Spacer()
@@ -249,7 +246,7 @@ struct PracticeView: View {
         try? modelContext.save()
     }
 
-    private var stageIndicatorView: some View {
+    private func stageIndicatorView(card: Card) -> some View {
         HStack(spacing: 4) {
             ForEach(PracticeStage.allCases, id: \.rawValue) { stage in
                 Button(action: { jumpToStage(stage) }) {
@@ -260,6 +257,11 @@ struct PracticeView: View {
                         Text(stage.title)
                             .font(.caption2)
                             .foregroundStyle(stage == currentStage ? .primary : .secondary)
+                        if let bpm = card.bpm(for: stage) {
+                            Text("\(bpm)")
+                                .font(.caption)
+                                .foregroundStyle(stageColor(stage))
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -289,45 +291,6 @@ struct PracticeView: View {
         }
     }
 
-    private func bpmLevelsView(card: Card) -> some View {
-        Group {
-            if card.comfortableBPM != nil || card.stretchBPM != nil || card.challengeBPM != nil {
-                HStack(spacing: 16) {
-                    if let bpm = card.comfortableBPM {
-                        VStack {
-                            Text("Comfortable")
-                                .font(.caption2)
-                            Text("\(bpm)")
-                                .font(.subheadline)
-                                .foregroundStyle(.green)
-                        }
-                    }
-                    if let bpm = card.stretchBPM {
-                        VStack {
-                            Text("Stretch")
-                                .font(.caption2)
-                            Text("\(bpm)")
-                                .font(.subheadline)
-                                .foregroundStyle(.yellow)
-                        }
-                    }
-                    if let bpm = card.challengeBPM {
-                        VStack {
-                            Text("Challenge")
-                                .font(.caption2)
-                            Text("\(bpm)")
-                                .font(.subheadline)
-                                .foregroundStyle(.red)
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-            }
-        }
-    }
 
     private var metronomeView: some View {
         VStack(spacing: 12) {
