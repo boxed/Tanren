@@ -39,8 +39,10 @@ class MetronomeEngine: ObservableObject {
 
     private func setupAudio() {
         // Configure audio session early to avoid lag on first play
+        // Use .mixWithOthers to allow podcast/music to continue playing
+        // Use .duckOthers to slightly lower other audio volume during clicks (optional)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Failed to configure audio session: \(error)")
@@ -117,8 +119,22 @@ class MetronomeEngine: ObservableObject {
         return buffer
     }
 
+    /// Reclaims the audio session and engine. The tuner takes the session over
+    /// to record, which leaves the playback engine stopped.
+    func reclaimAudioSession() {
+        guard let audioEngine, !audioEngine.isRunning else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            try audioEngine.start()
+        } catch {
+            print("Failed to reclaim audio session: \(error)")
+        }
+    }
+
     func start() {
         guard !isPlaying else { return }
+        reclaimAudioSession()
         isPlaying = true
         currentBeat = 0
         lastPlayedBeat = -1

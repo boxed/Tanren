@@ -333,7 +333,11 @@ struct PracticeView: View {
                         .transaction { $0.animation = nil }
                 }
 
-                Button(action: { showTuner = true }) {
+                Button(action: {
+                    // The tuner needs the audio session for recording.
+                    metronome.stop()
+                    showTuner = true
+                }) {
                     Image(systemName: "tuningfork")
                         .font(.system(size: 28))
                         .foregroundStyle(.blue)
@@ -346,7 +350,10 @@ struct PracticeView: View {
         .frame(maxWidth: .infinity)
         .padding()
         .background(Color(.systemGray6))
-        .sheet(isPresented: $showTuner) {
+        .sheet(isPresented: $showTuner, onDismiss: {
+            metronome.reclaimAudioSession()
+            intervalTimer.reclaimAudioSession()
+        }) {
             TunerView()
         }
     }

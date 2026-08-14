@@ -6,6 +6,7 @@
 	<string>The tuner needs microphone access to detect the pitch of your guitar strings.</string>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>remote-notification</string>
 	</array>
 </dict>

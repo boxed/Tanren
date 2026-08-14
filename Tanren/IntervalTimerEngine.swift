@@ -41,8 +41,9 @@ class IntervalTimerEngine: ObservableObject {
     }
 
     private func setupAudio() {
+        // Use .mixWithOthers to allow podcast/music to continue playing
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Failed to configure audio session: \(error)")
@@ -167,8 +168,22 @@ class IntervalTimerEngine: ObservableObject {
         }
     }
 
+    /// Reclaims the audio session and engine. The tuner takes the session over
+    /// to record, which leaves the playback engine stopped.
+    func reclaimAudioSession() {
+        guard let audioEngine, !audioEngine.isRunning else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            try audioEngine.start()
+        } catch {
+            print("Failed to reclaim audio session: \(error)")
+        }
+    }
+
     func start() {
         guard !isRunning, !intervals.isEmpty, !isComplete else { return }
+        reclaimAudioSession()
         isRunning = true
 
         // Start count-in if this is the first time starting
