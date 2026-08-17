@@ -19,59 +19,37 @@ struct DeckDetailView: View {
         SpacedRepetitionManager.selectCardsForPractice(from: deck).count
     }
 
+    private var suspendedCount: Int {
+        deck.cards.filter(\.isSuspended).count
+    }
+
+    private var newCount: Int {
+        deck.cards.filter { $0.reviewCount == 0 && !$0.isSuspended }.count
+    }
+
     var body: some View {
         List {
-            Section {
-                Button(action: { showingPractice = true }) {
-                    HStack {
-                        Image(systemName: "play.fill")
-                        Text("Start Practice")
-                        Spacer()
-                        if dueCount > 0 {
-                            Text("\(dueCount) due")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .disabled(deck.cards.isEmpty)
+            // Skipped entirely when empty so the header doesn't sit above the
+            // "No Cards" placeholder.
+            if !deck.cards.isEmpty {
+                cardsSection
             }
-
-            Section("Cards (\(deck.cards.count))") {
-                ForEach(deck.cards.sorted { $0.name < $1.name }) { card in
-                    Button(action: { selectedCard = card }) {
-                        CardRowView(card: card)
-                    }
-                    .buttonStyle(.plain)
-                    .onLongPressGesture {
-                        cardToEdit = card
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            deleteCard(card)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions(edge: .leading) {
-                        Button {
-                            cardToEdit = card
-                        } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        .tint(.blue)
-
-                        Button {
-                            card.isSuspended.toggle()
-                        } label: {
-                            if card.isSuspended {
-                                Label("Unsuspend", systemImage: "play.circle")
-                            } else {
-                                Label("Suspend", systemImage: "pause.circle")
-                            }
-                        }
-                        .tint(card.isSuspended ? .green : .orange)
-                    }
+        }
+        .overlay {
+            if deck.cards.isEmpty {
+                ContentUnavailableView {
+                    Label("No Cards", systemImage: "rectangle.on.rectangle")
+                } description: {
+                    Text("Add cards to practice in this deck.")
+                } actions: {
+                    Button("Add Card") { showingAddCard = true }
+                        .buttonStyle(.borderedProminent)
                 }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if !deck.cards.isEmpty {
+                practiceBar
             }
         }
         .navigationTitle(deck.name)
@@ -102,6 +80,91 @@ struct DeckDetailView: View {
         .sheet(item: $cardToEdit) { card in
             EditCardView(card: card)
         }
+    }
+
+    private var cardsSection: some View {
+        Section {
+            ForEach(deck.cards.sorted { $0.name < $1.name }) { card in
+                Button(action: { selectedCard = card }) {
+                    CardRowView(card: card)
+                }
+                .buttonStyle(.plain)
+                .onLongPressGesture {
+                    cardToEdit = card
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteCard(card)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        cardToEdit = card
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .tint(.blue)
+
+                    Button {
+                        card.isSuspended.toggle()
+                    } label: {
+                        if card.isSuspended {
+                            Label("Unsuspend", systemImage: "play.circle")
+                        } else {
+                            Label("Suspend", systemImage: "pause.circle")
+                        }
+                    }
+                    .tint(card.isSuspended ? .green : .orange)
+                }
+            }
+        } header: {
+            HStack(spacing: 6) {
+                Text("\(deck.cards.count) Cards")
+                Spacer()
+                if newCount > 0 {
+                    Pill("\(newCount) new", tint: .accentColor)
+                }
+                if suspendedCount > 0 {
+                    Pill("\(suspendedCount)", systemImage: "pause.fill")
+                }
+            }
+            .textCase(nil)
+        }
+    }
+
+    /// Primary action, pinned so it stays reachable however long the card list
+    /// gets.
+    private var practiceBar: some View {
+        VStack(spacing: 6) {
+            Button(action: { showingPractice = true }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                    Text("Start Practice")
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(dueCount > 0 ? Color.accentColor : Color.secondary.opacity(0.25))
+                )
+                .foregroundStyle(dueCount > 0 ? Color.white : Color.secondary)
+            }
+            .disabled(dueCount == 0)
+
+            Text(dueCount > 0
+                 ? "\(dueCount) card\(dueCount == 1 ? "" : "s") queued for this session"
+                 : "Nothing due — everything here is practiced for today")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(.bar)
     }
 
     private func deleteCard(_ card: Card) {
@@ -325,78 +388,61 @@ struct EditCardView: View {
 struct CardRowView: View {
     let card: Card
 
+    /// Right-hand status line: when this card comes back around.
+    private var scheduleText: String {
+        if card.isSuspended { return "Suspended" }
+        if card.wasPracticedToday { return "Done today" }
+        if card.isDue { return "Due now" }
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: Date()),
+            to: Calendar.current.startOfDay(for: card.nextReviewDate)
+        ).day ?? 0
+        return days <= 1 ? "Tomorrow" : "In \(days) days"
+    }
+
+    private var scheduleColor: Color {
+        if card.isSuspended || card.wasPracticedToday { return .secondary }
+        return card.isDue ? .orange : .secondary
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(card.chord1)
                         .font(.headline)
                     if !card.chord2.isEmpty {
                         Image(systemName: "arrow.left.arrow.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                         Text(card.chord2)
                             .font(.headline)
                     }
                 }
+                .lineLimit(1)
 
-                Spacer()
-
-                if card.isSuspended {
-                    Image(systemName: "pause.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                } else if card.isDue {
-                    Image(systemName: "clock.fill")
-                        .foregroundStyle(.orange)
-                        .font(.caption)
-                }
+                BPMRamp(card: card)
             }
 
-            HStack(spacing: 12) {
-                if let bpm = card.comfortableBPM {
-                    BPMBadge(label: "C", bpm: bpm, color: .green)
-                }
-                if let bpm = card.stretchBPM {
-                    BPMBadge(label: "S", bpm: bpm, color: .yellow)
-                }
-                if let bpm = card.challengeBPM {
-                    BPMBadge(label: "X", bpm: bpm, color: .red)
-                }
+            Spacer(minLength: 4)
 
-                Spacer()
-
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(scheduleText)
+                    .font(.caption)
+                    .foregroundStyle(scheduleColor)
                 if card.reviewCount > 0 {
-                    Text("\(card.reviewCount) reviews")
+                    Text("\(card.reviewCount)×")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .opacity(card.isSuspended ? 0.5 : 1.0)
-    }
-}
-
-struct BPMBadge: View {
-    let label: String
-    let bpm: Int
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .fontWeight(.bold)
-            Text("\(bpm)")
-                .font(.caption)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(color.opacity(0.2))
-        .foregroundStyle(color)
-        .cornerRadius(4)
+        .opacity(card.isSuspended ? 0.45 : 1)
     }
 }
 

@@ -45,9 +45,11 @@ struct PracticeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Progress bar
+                // Session progress
                 ProgressView(value: progress)
-                    .tint(.blue)
+                    .tint(.accentColor)
+                    .scaleEffect(x: 1, y: 0.6, anchor: .top)
+                    .animation(.easeOut(duration: 0.25), value: progress)
 
                 if sessionComplete {
                     sessionCompleteView
@@ -75,9 +77,12 @@ struct PracticeView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
-                        Text("\(currentCardIndex + 1)/\(practiceCards.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if !practiceCards.isEmpty && !sessionComplete {
+                            Text("\(currentCardIndex + 1)/\(practiceCards.count)")
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
 
                         Menu {
                             Button("Bury card") {
@@ -132,66 +137,95 @@ struct PracticeView: View {
     }
 
     private func practiceContentView(card: Card) -> some View {
-        VStack(spacing: 16) {
-                // Card display - horizontal layout
-                HStack(spacing: 12) {
-                Text(card.chord1)
-                    .font(.system(size: 48, weight: .bold))
+        VStack(spacing: 0) {
+            // Reference material scrolls; the controls below stay put so the
+            // metronome is always under your thumb. The content is centred while
+            // it fits and only starts scrolling once it doesn't.
+            GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
+                    cardHeader(card: card)
 
-                if !card.chord2.isEmpty {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary)
-
-                    Text(card.chord2)
-                        .font(.system(size: 48, weight: .bold))
-                }
-            }
-            .padding(.top, 8)
-
-            // Card image
-            if deck.imagesEnabled, let imageData = card.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 200)
-                    .cornerRadius(8)
-            }
-
-            // Card URL
-            if deck.urlEnabled, let urlString = card.url, let url = URL(string: urlString) {
-                Link(destination: url) {
-                    HStack {
-                        Image(systemName: "link")
-                        Text(url.host ?? urlString)
+                    if deck.metronomeEnabled {
+                        stageIndicatorView(card: card)
                     }
-                    .font(.subheadline)
+
+                    if deck.imagesEnabled, let imageData = card.imageData, let uiImage = UIImage(data: imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 200)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .padding(.horizontal, 16)
+                    }
+
+                    if deck.urlEnabled, let urlString = card.url, let url = URL(string: urlString) {
+                        Link(destination: url) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "link")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(url.host ?? urlString)
+                                    .lineLimit(1)
+                            }
+                            .font(.subheadline)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
+                    }
+
+                    if deck.intervalTimersEnabled && !card.intervalTimerList.isEmpty {
+                        intervalTimerView(card: card)
+                    }
                 }
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
             }
 
-            // Interval Timer
-            if deck.intervalTimersEnabled && !card.intervalTimerList.isEmpty {
-                intervalTimerView(card: card)
+            VStack(spacing: 14) {
+                if deck.metronomeEnabled {
+                    metronomeView
+                }
+
+                stageActionView(card: card)
             }
-
-            if deck.metronomeEnabled {
-                // Stage indicator with BPM levels
-                stageIndicatorView(card: card)
-            }
-
-            Spacer()
-
-            if deck.metronomeEnabled {
-                // Metronome section
-                metronomeView
-            }
-
-            Spacer()
-
-            // Stage action button
-            stageActionView(card: card)
-                .padding()
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
+    }
+
+    /// The card itself — sized to fit rather than clipped, since sides can hold
+    /// anything from "C" to a whole phrase. Short names get to be huge; long
+    /// ones step down so they don't push the controls off screen.
+    private func cardHeader(card: Card) -> some View {
+        let length = card.chord1.count + card.chord2.count
+        let size: CGFloat = switch length {
+        case 0...6: 64
+        case 7...12: 52
+        case 13...24: 38
+        default: 28
+        }
+
+        return HStack(spacing: 14) {
+            Text(card.chord1)
+                .frame(maxWidth: card.chord2.isEmpty ? .infinity : nil)
+
+            if !card.chord2.isEmpty {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: max(16, size * 0.4), weight: .medium))
+                    .foregroundStyle(.tertiary)
+
+                Text(card.chord2)
+            }
+        }
+        .font(.system(size: size, weight: .bold, design: .rounded))
+        .lineLimit(2)
+        .minimumScaleFactor(0.4)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 16)
+        .contentTransition(.opacity)
+        .animation(.easeOut(duration: 0.2), value: card.name)
     }
 
     private func buryCurrentCard() {
@@ -244,28 +278,50 @@ struct PracticeView: View {
     }
 
     private func stageIndicatorView(card: Card) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             ForEach(PracticeStage.allCases, id: \.rawValue) { stage in
                 Button(action: { jumpToStage(stage) }) {
-                    VStack(spacing: 2) {
-                        Circle()
-                            .fill(stageColor(stage))
-                            .frame(width: 12, height: 12)
-                        Text(stage.title)
-                            .font(.caption2)
-                            .foregroundStyle(stage == currentStage ? .primary : .secondary)
-                        if let bpm = card.bpm(for: stage) {
-                            Text("\(bpm)")
-                                .font(.caption)
-                                .foregroundStyle(stageColor(stage))
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                    stageChip(stage, card: card)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
+        .animation(.easeOut(duration: 0.2), value: currentStage)
+    }
+
+    private func stageChip(_ stage: PracticeStage, card: Card) -> some View {
+        let isCurrent = stage == currentStage
+        let isDone = stage.rawValue < currentStage.rawValue
+        let tint = stageColor(stage)
+
+        return VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: isDone ? "checkmark" : stage.symbolName)
+                    .font(.system(size: 10, weight: .bold))
+                Text(stage.shortTitle)
+                    .font(.caption.weight(isCurrent ? .bold : .medium))
+            }
+            .foregroundStyle(isCurrent || isDone ? tint : Color.secondary)
+
+            Text(card.bpm(for: stage).map(String.init) ?? "—")
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(isCurrent || isDone ? tint : Color.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isCurrent ? tint.opacity(0.16) : Color(.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isCurrent ? tint : .clear, lineWidth: 2)
+        )
+        .accessibilityLabel("\(stage.title) stage")
+        .accessibilityValue(card.bpm(for: stage).map { "\($0) BPM" } ?? "not established")
+        .accessibilityAddTraits(isCurrent ? [.isSelected, .isButton] : .isButton)
     }
 
     private func jumpToStage(_ stage: PracticeStage) {
@@ -278,11 +334,7 @@ struct PracticeView: View {
         if stage.rawValue < currentStage.rawValue {
             return .green // Completed
         } else if stage == currentStage {
-            switch stage {
-            case .comfortable: return .green
-            case .stretch: return .yellow
-            case .challenge: return .red
-            }
+            return stage.tint
         } else {
             return .gray.opacity(0.3) // Not yet
         }
@@ -290,48 +342,50 @@ struct PracticeView: View {
 
 
     private var metronomeView: some View {
-        VStack(spacing: 12) {
-            // Beat indicator
-            HStack(spacing: 6) {
-                ForEach(1...metronome.beatsPerMeasure, id: \.self) { beat in
-                    Circle()
-                        .fill(beat == metronome.currentBeat ? Color.blue : Color.gray.opacity(0.3))
-                        .frame(width: 16, height: 16)
-                        .animation(.easeInOut(duration: 0.1), value: metronome.currentBeat)
-                }
+        VStack(spacing: 14) {
+            HStack {
+                panelLabel("Metronome")
+                Spacer()
+                beatIndicator
             }
 
-            // BPM display and controls with play button
-            HStack(spacing: 20) {
-                Button(action: { metronome.decreaseBPM() }) {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.blue)
-                }
+            // Tempo, transport and tuner on one row: everything you touch while
+            // playing sits within thumb reach of each other.
+            HStack(spacing: 12) {
+                bpmStepButton("minus", action: metronome.decreaseBPM)
 
-                VStack(spacing: 2) {
+                VStack(spacing: 0) {
                     Text("\(metronome.bpm)")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(metronome.bpm)))
+                        .animation(.easeOut(duration: 0.15), value: metronome.bpm)
                         .lineLimit(1)
                         .fixedSize()
                     Text("BPM")
-                        .font(.caption2)
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
                         .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
 
-                Button(action: { metronome.increaseBPM() }) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.blue)
-                }
+                bpmStepButton("plus", action: metronome.increaseBPM)
             }
-            HStack(spacing: 24) {
+
+            // Round transport, so it never reads as the same kind of control as
+            // the wide "done with this stage" button below the panel.
+            ZStack {
                 Button(action: { metronome.toggle() }) {
-                    Image(systemName: metronome.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 52))
-                        .foregroundStyle(metronome.isPlaying ? .red : .green)
+                    Image(systemName: metronome.isPlaying ? "stop.fill" : "play.fill")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .background(
+                            Circle().fill(metronome.isPlaying ? Color.red : Color.green)
+                        )
                         .transaction { $0.animation = nil }
                 }
+                .accessibilityLabel(metronome.isPlaying ? "Stop metronome" : "Start metronome")
 
                 Button(action: {
                     // The tuner needs the audio session for recording.
@@ -339,17 +393,19 @@ struct PracticeView: View {
                     showTuner = true
                 }) {
                     Image(systemName: "tuningfork")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.blue)
-                        .frame(width: 44, height: 44)
-                        .background(Color.blue.opacity(0.15))
-                        .clipShape(Circle())
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(.tint)
+                        .frame(width: 46, height: 46)
+                        .background(Circle().fill(Color.accentColor.opacity(0.14)))
                 }
+                .accessibilityLabel("Tuner")
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemGray6))
+        .padding(16)
+        .panel()
         .sheet(isPresented: $showTuner, onDismiss: {
             metronome.reclaimAudioSession()
             intervalTimer.reclaimAudioSession()
@@ -358,20 +414,70 @@ struct PracticeView: View {
         }
     }
 
+    /// Names a control cluster, so the two round green transports on screen are
+    /// never ambiguous.
+    private func panelLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .tracking(0.9)
+            .foregroundStyle(.tertiary)
+    }
+
+    /// The downbeat is drawn larger so you can find beat one at a glance.
+    private var beatIndicator: some View {
+        HStack(spacing: 10) {
+            ForEach(1...metronome.beatsPerMeasure, id: \.self) { beat in
+                let isActive = beat == metronome.currentBeat && metronome.isPlaying
+                let size: CGFloat = beat == 1 ? 15 : 11
+
+                Circle()
+                    .fill(isActive ? Color.accentColor : Color.secondary.opacity(0.25))
+                    .frame(width: size, height: size)
+                    .scaleEffect(isActive ? 1.35 : 1)
+                    .animation(.easeOut(duration: 0.08), value: metronome.currentBeat)
+                    .animation(.easeOut(duration: 0.15), value: metronome.isPlaying)
+            }
+        }
+        .frame(height: 22)
+        .accessibilityHidden(true)
+    }
+
+    private func bpmStepButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.tint)
+                .frame(width: 52, height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.14))
+                )
+        }
+        .accessibilityLabel(symbol == "plus" ? "Increase tempo" : "Decrease tempo")
+    }
+
     private func intervalTimerView(card: Card) -> some View {
-        VStack(spacing: 16) {
-            // Count-in or Total time display
-            if intervalTimer.isCountingIn {
-                Text("Get Ready...")
-                    .font(.headline)
-                    .foregroundStyle(.orange)
-            } else {
-                HStack {
-                    Image(systemName: "timer")
-                        .foregroundStyle(.secondary)
-                    Text("Total: \(IntervalTimerEngine.formatTime(intervalTimer.totalRemaining))")
-                        .font(.headline)
-                        .monospacedDigit()
+        VStack(spacing: 10) {
+            HStack {
+                panelLabel("Interval Timer")
+
+                Spacer()
+
+                if intervalTimer.isCountingIn {
+                    Text("Get ready")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                } else {
+                    HStack(spacing: 5) {
+                        Image(systemName: "timer")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(IntervalTimerEngine.formatTime(intervalTimer.totalRemaining))
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                        Text("left")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -379,12 +485,12 @@ struct PracticeView: View {
             if !intervalTimer.isComplete {
                 if intervalTimer.isCountingIn {
                     Text("\(intervalTimer.countInRemaining)")
-                        .font(.system(size: 72, weight: .bold, design: .rounded))
+                        .font(.system(size: 50, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.orange)
                 } else {
                     Text("\(intervalTimer.currentIntervalRemaining)")
-                        .font(.system(size: 72, weight: .bold, design: .rounded))
+                        .font(.system(size: 50, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(intervalTimer.isRunning ? .primary : .secondary)
                 }
@@ -398,33 +504,35 @@ struct PracticeView: View {
                             VStack(spacing: 4) {
                                 if index == intervalTimer.currentIntervalIndex && !intervalTimer.isComplete && !intervalTimer.isCountingIn {
                                     Image(systemName: "arrowtriangle.down.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.blue)
+                                        .font(.system(size: 8))
+                                        .foregroundStyle(.tint)
                                 } else {
                                     Color.clear.frame(height: 10)
                                 }
 
                                 Text("\(seconds)s")
                                     .font(.subheadline)
+                                    .monospacedDigit()
                                     .fontWeight(index == intervalTimer.currentIntervalIndex && !intervalTimer.isCountingIn ? .bold : .regular)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 5)
                                     .background(
-                                        index < intervalTimer.currentIntervalIndex ? Color.green.opacity(0.3) :
-                                        index == intervalTimer.currentIntervalIndex && !intervalTimer.isCountingIn ? Color.blue.opacity(0.3) :
-                                        Color(.systemGray5)
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(
+                                                index < intervalTimer.currentIntervalIndex ? Color.green.opacity(0.18) :
+                                                index == intervalTimer.currentIntervalIndex && !intervalTimer.isCountingIn ? Color.accentColor.opacity(0.18) :
+                                                Color(.tertiarySystemFill)
+                                            )
                                     )
                                     .foregroundStyle(
-                                        index < intervalTimer.currentIntervalIndex ? .green :
-                                        index == intervalTimer.currentIntervalIndex && !intervalTimer.isCountingIn ? .blue :
-                                        .secondary
+                                        index < intervalTimer.currentIntervalIndex ? Color.green :
+                                        index == intervalTimer.currentIntervalIndex && !intervalTimer.isCountingIn ? Color.accentColor :
+                                        Color.secondary
                                     )
-                                    .cornerRadius(8)
                             }
                             .id(index)
                         }
                     }
-                    .padding(.horizontal)
                 }
                 .opacity(intervalTimer.isCountingIn ? 0.5 : 1.0)
                 .onChange(of: intervalTimer.currentIntervalIndex) { _, newIndex in
@@ -434,31 +542,40 @@ struct PracticeView: View {
                 }
             }
 
-            // Start/Pause button
-            Button(action: { intervalTimer.toggle() }) {
-                HStack {
-                    Image(systemName: intervalTimer.isRunning ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 44))
-                    Text(intervalTimer.isRunning ? "Pause" : (intervalTimer.isComplete ? "Complete" : "Start"))
-                        .font(.headline)
+            // Same control language as the metronome: round transport in the
+            // middle, round secondary action off to the side.
+            ZStack {
+                Button(action: { intervalTimer.toggle() }) {
+                    Image(systemName: intervalTimer.isComplete
+                          ? "checkmark"
+                          : (intervalTimer.isRunning ? "pause.fill" : "play.fill"))
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .background(
+                            Circle().fill(intervalTimer.isComplete
+                                          ? Color.green
+                                          : (intervalTimer.isRunning ? Color.orange : Color.green))
+                        )
                 }
-                .foregroundStyle(intervalTimer.isComplete ? .green : (intervalTimer.isRunning ? .orange : .blue))
-            }
-            .disabled(intervalTimer.isComplete)
+                .disabled(intervalTimer.isComplete)
+                .accessibilityLabel(intervalTimer.isRunning ? "Pause timer" : "Start timer")
 
-            // Reset button (shown when paused or complete)
-            if !intervalTimer.isRunning || intervalTimer.isComplete {
-                Button("Reset Timer") {
-                    intervalTimer.reset()
+                Button(action: { intervalTimer.reset() }) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 46, height: 46)
+                        .background(Circle().fill(Color(.tertiarySystemFill)))
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .accessibilityLabel("Reset timer")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-        .padding(.horizontal)
+        .padding(16)
+        .panel()
+        .padding(.horizontal, 16)
     }
 
     private func configureIntervalTimer(for card: Card) {
@@ -467,39 +584,44 @@ struct PracticeView: View {
     }
 
     private func stageActionView(card: Card) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             if deck.metronomeEnabled {
                 Text(currentStage.description)
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .animation(.easeOut(duration: 0.2), value: currentStage)
 
-                Button(action: { completeStage(card: card) }) {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                        Text("Done with \(currentStage.title)")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(stageColor(currentStage))
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-                    .font(.headline)
+                completeButton(
+                    title: currentStage == .challenge ? "Finish Card" : "Done with \(currentStage.title)"
+                ) {
+                    completeStage(card: card)
                 }
             } else {
-                Button(action: { completeCardWithoutMetronome(card: card) }) {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                        Text("Done")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-                    .font(.headline)
+                completeButton(title: "Done") {
+                    completeCardWithoutMetronome(card: card)
                 }
             }
+        }
+    }
+
+    /// Always the accent colour: green/red belong to the metronome transport, so
+    /// tinting this by stage made two unrelated buttons look like a pair.
+    private func completeButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 15, weight: .bold))
+                Text(title)
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.accentColor)
+            )
+            .foregroundStyle(.white)
         }
     }
 
@@ -554,49 +676,47 @@ struct PracticeView: View {
     }
 
     private var sessionCompleteView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 0) {
             Spacer()
 
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.green)
-
-            Text("Session Complete!")
-                .font(.title)
-                .fontWeight(.bold)
-
-            Text("You practiced \(practiceCards.count) cards")
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button("Done") {
-                dismiss()
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.14))
+                    .frame(width: 116, height: 116)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 52, weight: .bold))
+                    .foregroundStyle(.green)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+
+            Text("Session Complete")
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .padding(.top, 24)
+
+            Text("\(practiceCards.count) card\(practiceCards.count == 1 ? "" : "s") practiced")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
 
             Spacer()
+
+            Button("Done") { dismiss() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
         }
-        .padding()
+        .frame(maxWidth: .infinity)
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "music.note.list")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-
-            Text("No cards to practice")
-                .font(.title2)
-
-            Text("Add some cards to this deck first")
-                .foregroundStyle(.secondary)
-
-            Button("Go Back") {
-                dismiss()
-            }
-            .buttonStyle(.bordered)
+        ContentUnavailableView {
+            Label("Nothing to Practice", systemImage: "music.note.list")
+        } description: {
+            Text("Every card in this deck is done for today, or the deck is still empty.")
+        } actions: {
+            Button("Go Back") { dismiss() }
+                .buttonStyle(.bordered)
         }
     }
 }

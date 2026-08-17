@@ -28,11 +28,12 @@ enum PracticeStage: Int, CaseIterable {
         }
     }
 
-    var color: String {
+    /// Short label for compact contexts where "Comfortable" won't fit.
+    var shortTitle: String {
         switch self {
-        case .comfortable: return "green"
-        case .stretch: return "yellow"
-        case .challenge: return "red"
+        case .comfortable: return "Comfort"
+        case .stretch: return "Stretch"
+        case .challenge: return "Challenge"
         }
     }
 }

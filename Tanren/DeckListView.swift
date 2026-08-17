@@ -20,6 +20,18 @@ struct DeckListView: View {
             }
             .onDelete(perform: deleteDecks)
         }
+        .overlay {
+            if decks.isEmpty {
+                ContentUnavailableView {
+                    Label("No Decks", systemImage: "square.stack.3d.up")
+                } description: {
+                    Text("Create a deck to start building a practice routine.")
+                } actions: {
+                    Button("New Deck") { showingNewDeckSheet = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
         .navigationTitle("Tanren")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -116,26 +128,49 @@ struct DeckRowView: View {
         SpacedRepetitionManager.selectCardsForPractice(from: deck).count
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(deck.name)
-                .font(.headline)
+    /// Share of the deck that has been practiced at least once.
+    private var startedFraction: Double {
+        guard !deck.cards.isEmpty else { return 0 }
+        return Double(startedCount) / Double(deck.cards.count)
+    }
 
-            HStack {
-                Text("\(deck.cards.count) cards")
+    private var startedCount: Int {
+        deck.cards.filter { $0.reviewCount > 0 }.count
+    }
+
+    private var subtitle: String {
+        let cards = "\(deck.cards.count) card\(deck.cards.count == 1 ? "" : "s")"
+        guard !deck.cards.isEmpty else { return "Empty deck" }
+        return startedCount == 0
+            ? "\(cards) · not started"
+            : "\(cards) · \(startedCount) started"
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                ProgressRing(progress: startedFraction)
+                Image(systemName: "music.note")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tint)
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(deck.name)
+                    .font(.headline)
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
 
-                if dueCount > 0 {
-                    Text("•")
-                        .foregroundStyle(.secondary)
-                    Text("\(dueCount) due")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
+            Spacer(minLength: 8)
+
+            if dueCount > 0 {
+                Pill("\(dueCount) due", systemImage: "clock.fill", tint: .orange)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 
