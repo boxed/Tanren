@@ -14,6 +14,20 @@ struct SpacedRepetitionManager {
     static let initialInterval = 1
     static let secondInterval = 3
 
+    /// A ceiling on how far out a card can be pushed. Without one, multiplying
+    /// by `easeFactor` on every success compounds without bound: cards have
+    /// reached intervals of 10^16 days, which drops them out of the rotation
+    /// for good and eventually overflows `Int`. Six months is already past the
+    /// point where a motor skill needs checking on.
+    static let maximumInterval = 180
+
+    /// Brings a computed interval back into range, and copes with the absurd
+    /// values already sitting in stores written before there was a ceiling.
+    private static func clampInterval(_ days: Double) -> Int {
+        guard days.isFinite else { return maximumInterval }
+        return Int(min(max(days, Double(initialInterval)), Double(maximumInterval)))
+    }
+
     /// Called after completing all three stages of a card review
     /// Updates the card's scheduling based on the challenge stage performance
     static func completeReview(card: Card, challengeSuccessful: Bool) {
@@ -27,18 +41,18 @@ struct SpacedRepetitionManager {
             } else if card.reviewCount == 2 {
                 card.intervalDays = secondInterval
             } else {
-                card.intervalDays = Int(Double(card.intervalDays) * card.easeFactor)
+                card.intervalDays = clampInterval(Double(card.intervalDays) * card.easeFactor)
             }
             card.easeFactor = min(2.5, card.easeFactor + 0.1)
         } else {
             // Struggled at challenge level - shorter interval
-            card.intervalDays = max(initialInterval, card.intervalDays / 2)
+            card.intervalDays = clampInterval(Double(card.intervalDays) / 2)
             card.easeFactor = max(1.3, card.easeFactor - 0.1)
         }
 
         // Add 10-20% randomness to prevent clustering
         let randomFactor = 0.9 + Double.random(in: 0..<0.2)
-        card.intervalDays = max(1, Int(Double(card.intervalDays) * randomFactor))
+        card.intervalDays = clampInterval(Double(card.intervalDays) * randomFactor)
 
         // Schedule next review
         card.nextReviewDate = Calendar.current.date(
@@ -46,6 +60,33 @@ struct SpacedRepetitionManager {
             value: card.intervalDays,
             to: Date()
         ) ?? Date()
+    }
+
+    /// Pulls back cards that a previously uncapped interval pushed past the
+    /// horizon — without this they are never due again, so they would never be
+    /// rescheduled and never come back. Idempotent: only touches cards that are
+    /// actually out of range. Returns the names it repaired.
+    @discardableResult
+    static func repairRunawayIntervals(modelContext: ModelContext) -> [String] {
+        let cards = (try? modelContext.fetch(FetchDescriptor<Card>())) ?? []
+        var repaired: [String] = []
+
+        for card in cards where card.intervalDays > maximumInterval {
+            card.intervalDays = maximumInterval
+            // Reschedule from the last review, so a well-learned card keeps its
+            // long interval rather than being dumped back into today's session.
+            let anchor = card.lastReviewDate ?? Date()
+            card.nextReviewDate = min(
+                card.nextReviewDate,
+                Calendar.current.date(byAdding: .day, value: maximumInterval, to: anchor) ?? Date()
+            )
+            repaired.append(card.name)
+        }
+
+        if !repaired.isEmpty {
+            try? modelContext.save()
+        }
+        return repaired
     }
 
     /// How many cards were already practiced today in this deck
@@ -57,7 +98,7 @@ struct SpacedRepetitionManager {
     /// Prioritizes due cards and weak spots, but includes some randomness
     static func selectCardsForPractice(from deck: Deck, maxCards: Int = 10) -> [Card] {
         // Exclude suspended cards and cards already practiced today
-        let allCards = deck.cards.filter { !$0.isSuspended && !$0.wasPracticedToday }
+        let allCards = deck.cards.filter(\.isEligibleForPractice)
 
         // Reduce max cards by how many were already done today
         let remainingQuota = max(0, maxCards - cardsPracticedToday(in: deck))

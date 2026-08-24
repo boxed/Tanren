@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct TanrenApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Deck.self,
@@ -29,5 +31,12 @@ struct TanrenApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+        .onChange(of: scenePhase) { _, phase in
+            // Leaving the foreground is when the widget starts to matter, and
+            // when any practice results are final.
+            if phase != .active {
+                PracticeSnapshotWriter.refresh(modelContext: sharedModelContainer.mainContext)
+            }
+        }
     }
 }

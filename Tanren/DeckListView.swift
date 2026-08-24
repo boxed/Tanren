@@ -45,6 +45,10 @@ struct DeckListView: View {
         }
         .onAppear {
             DataSeeder.seedIfNeeded(modelContext: modelContext)
+            SpacedRepetitionManager.repairRunawayIntervals(modelContext: modelContext)
+            // Also the moment a practice session hands control back, so the
+            // widget reflects what was just practiced.
+            PracticeSnapshotWriter.refresh(modelContext: modelContext)
         }
     }
 
@@ -124,10 +128,6 @@ struct NewDeckView: View {
 struct DeckRowView: View {
     let deck: Deck
 
-    var dueCount: Int {
-        SpacedRepetitionManager.selectCardsForPractice(from: deck).count
-    }
-
     /// Share of the deck that has been practiced at least once.
     private var startedFraction: Double {
         guard !deck.cards.isEmpty else { return 0 }
@@ -166,8 +166,8 @@ struct DeckRowView: View {
 
             Spacer(minLength: 8)
 
-            if dueCount > 0 {
-                Pill("\(dueCount) due", systemImage: "clock.fill", tint: .orange)
+            if deck.dueCount > 0 {
+                Pill("\(deck.dueCount) due", systemImage: "clock.fill", tint: .orange)
             }
         }
         .padding(.vertical, 6)

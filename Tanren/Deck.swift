@@ -14,6 +14,12 @@ final class Deck {
     var imagesEnabled: Bool = false
     var urlEnabled: Bool = false
     var intervalTimersEnabled: Bool = false
+
+    /// Stable identifier for widget deep links: survives a rename, and is short
+    /// enough to sit in a URL. Optional and assigned on first use, so existing
+    /// decks pick one up without a migration step.
+    var linkID: UUID?
+
     @Relationship(deleteRule: .cascade, inverse: \Card.deck) var cardsRelation: [Card]?
 
     var cards: [Card] {

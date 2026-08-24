@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AEB71C092EE5819300FB9E0F /* TanrenWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AEB71C012EE5819300FB9E0F /* TanrenWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		AEB71B942EE5819300FB9E0F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +25,34 @@
 			remoteGlobalIDString = AEB71B812EE5819100FB9E0F;
 			remoteInfo = Tanren;
 		};
+		AEB71C0A2EE5819300FB9E0F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AEB71B7A2EE5819100FB9E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AEB71C002EE5819300FB9E0F;
+			remoteInfo = TanrenWidget;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AEB71C082EE5819300FB9E0F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AEB71C092EE5819300FB9E0F /* TanrenWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AEB71B822EE5819100FB9E0F /* Tanren.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tanren.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEB71B932EE5819300FB9E0F /* TanrenTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TanrenTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEB71B9D2EE5819300FB9E0F /* TanrenUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TanrenUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AEB71C012EE5819300FB9E0F /* TanrenWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TanrenWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,6 +62,13 @@
 				Info.plist,
 			);
 			target = AEB71B812EE5819100FB9E0F /* Tanren */;
+		};
+		AEB71C042EE5819300FB9E0F /* Exceptions for "TanrenWidget" folder in "TanrenWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AEB71C002EE5819300FB9E0F /* TanrenWidget */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -56,6 +89,19 @@
 		AEB71BA02EE5819300FB9E0F /* TanrenUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TanrenUITests;
+			sourceTree = "<group>";
+		};
+		AEB71C032EE5819300FB9E0F /* TanrenShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TanrenShared;
+			sourceTree = "<group>";
+		};
+		AEB71C022EE5819300FB9E0F /* TanrenWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AEB71C042EE5819300FB9E0F /* Exceptions for "TanrenWidget" folder in "TanrenWidget" target */,
+			);
+			path = TanrenWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -82,6 +128,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AEB71C062EE5819300FB9E0F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -89,6 +142,8 @@
 			isa = PBXGroup;
 			children = (
 				AEB71B842EE5819100FB9E0F /* Tanren */,
+				AEB71C032EE5819300FB9E0F /* TanrenShared */,
+				AEB71C022EE5819300FB9E0F /* TanrenWidget */,
 				AEB71B962EE5819300FB9E0F /* TanrenTests */,
 				AEB71BA02EE5819300FB9E0F /* TanrenUITests */,
 				AEB71B832EE5819100FB9E0F /* Products */,
@@ -99,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				AEB71B822EE5819100FB9E0F /* Tanren.app */,
+				AEB71C012EE5819300FB9E0F /* TanrenWidget.appex */,
 				AEB71B932EE5819300FB9E0F /* TanrenTests.xctest */,
 				AEB71B9D2EE5819300FB9E0F /* TanrenUITests.xctest */,
 			);
@@ -115,13 +171,16 @@
 				AEB71B7E2EE5819100FB9E0F /* Sources */,
 				AEB71B7F2EE5819100FB9E0F /* Frameworks */,
 				AEB71B802EE5819100FB9E0F /* Resources */,
+				AEB71C082EE5819300FB9E0F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AEB71C0B2EE5819300FB9E0F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AEB71B842EE5819100FB9E0F /* Tanren */,
+				AEB71C032EE5819300FB9E0F /* TanrenShared */,
 			);
 			name = Tanren;
 			packageProductDependencies = (
@@ -176,6 +235,29 @@
 			productReference = AEB71B9D2EE5819300FB9E0F /* TanrenUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		AEB71C002EE5819300FB9E0F /* TanrenWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AEB71C0C2EE5819300FB9E0F /* Build configuration list for PBXNativeTarget "TanrenWidget" */;
+			buildPhases = (
+				AEB71C052EE5819300FB9E0F /* Sources */,
+				AEB71C062EE5819300FB9E0F /* Frameworks */,
+				AEB71C072EE5819300FB9E0F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AEB71C022EE5819300FB9E0F /* TanrenWidget */,
+				AEB71C032EE5819300FB9E0F /* TanrenShared */,
+			);
+			name = TanrenWidget;
+			packageProductDependencies = (
+			);
+			productName = TanrenWidget;
+			productReference = AEB71C012EE5819300FB9E0F /* TanrenWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +279,9 @@
 						CreatedOnToolsVersion = 26.1.1;
 						TestTargetID = AEB71B812EE5819100FB9E0F;
 					};
+					AEB71C002EE5819300FB9E0F = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = AEB71B7D2EE5819100FB9E0F /* Build configuration list for PBXProject "Tanren" */;
@@ -216,6 +301,7 @@
 				AEB71B812EE5819100FB9E0F /* Tanren */,
 				AEB71B922EE5819300FB9E0F /* TanrenTests */,
 				AEB71B9C2EE5819300FB9E0F /* TanrenUITests */,
+				AEB71C002EE5819300FB9E0F /* TanrenWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -236,6 +322,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AEB71B9B2EE5819300FB9E0F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AEB71C072EE5819300FB9E0F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +359,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AEB71C052EE5819300FB9E0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,6 +378,11 @@
 			isa = PBXTargetDependency;
 			target = AEB71B812EE5819100FB9E0F /* Tanren */;
 			targetProxy = AEB71B9E2EE5819300FB9E0F /* PBXContainerItemProxy */;
+		};
+		AEB71C0B2EE5819300FB9E0F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AEB71C002EE5819300FB9E0F /* TanrenWidget */;
+			targetProxy = AEB71C0A2EE5819300FB9E0F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -555,6 +660,68 @@
 			};
 			name = Release;
 		};
+		AEB71C0D2EE5819300FB9E0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TanrenWidget/TanrenWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B6FVY827P9;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TanrenWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Tanren;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kodare.Tanren.TanrenWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AEB71C0E2EE5819300FB9E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TanrenWidget/TanrenWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B6FVY827P9;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TanrenWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Tanren;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kodare.Tanren.TanrenWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -590,6 +757,15 @@
 			buildConfigurations = (
 				AEB71BAF2EE5819300FB9E0F /* Debug */,
 				AEB71BB02EE5819300FB9E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AEB71C0C2EE5819300FB9E0F /* Build configuration list for PBXNativeTarget "TanrenWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AEB71C0D2EE5819300FB9E0F /* Debug */,
+				AEB71C0E2EE5819300FB9E0F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
