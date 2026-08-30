@@ -180,7 +180,7 @@ private struct SmallDueView: View {
 
             if entry.isDoneForToday {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 30))
+                    .font(.system(size: 46))
                     .foregroundStyle(Color.steel)
                 Spacer(minLength: 4)
                 Text("Done for today")
@@ -191,7 +191,7 @@ private struct SmallDueView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Text("\(entry.dueCount)")
-                    .font(.system(size: 42, weight: .bold))
+                    .font(.system(size: 58, weight: .bold))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .monospacedDigit()
