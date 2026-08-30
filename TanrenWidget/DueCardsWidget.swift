@@ -156,12 +156,14 @@ struct DueCardsView: View {
 
     var body: some View {
         switch family {
+        // A finished day leaves the lock screen alone: the accessory families
+        // render nothing at all rather than a resting state.
         case .accessoryInline:
-            Text(entry.inlineText)
+            if !entry.isDoneForToday { Text(entry.inlineText) }
         case .accessoryCircular:
-            CircularDueView(entry: entry)
+            if entry.isDoneForToday { Color.clear } else { CircularDueView(entry: entry) }
         case .accessoryRectangular:
-            RectangularDueView(entry: entry)
+            if entry.isDoneForToday { Color.clear } else { RectangularDueView(entry: entry) }
         case .systemSmall:
             SmallDueView(entry: entry)
                 .widgetURL(entry.decks.first?.deepLink ?? PracticeSnapshot.deckListDeepLink)
@@ -348,12 +350,8 @@ private struct CircularDueView: View {
         Gauge(value: progress) {
             Image(systemName: "tornado")
         } currentValueLabel: {
-            if entry.isDoneForToday {
-                Image(systemName: "checkmark")
-            } else {
-                Text("\(entry.dueCount)")
-                    .monospacedDigit()
-            }
+            Text("\(entry.dueCount)")
+                .monospacedDigit()
         }
         .gaugeStyle(.accessoryCircular)
         .tint(.ember)
