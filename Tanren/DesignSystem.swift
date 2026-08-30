@@ -138,7 +138,7 @@ struct ProgressRing: View {
 #Preview("Pills") {
     VStack(alignment: .leading, spacing: 16) {
         HStack {
-            Pill("12 due", systemImage: "clock.fill", tint: .orange)
+            Pill("8 left", systemImage: "clock.fill", tint: .orange)
             Pill("New", tint: .accentColor)
             Pill("Suspended", systemImage: "pause.fill")
         }

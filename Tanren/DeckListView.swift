@@ -167,7 +167,7 @@ struct DeckRowView: View {
             Spacer(minLength: 8)
 
             if deck.dueCount > 0 {
-                Pill("\(deck.dueCount) due", systemImage: "clock.fill", tint: .orange)
+                Pill("\(deck.dueCount) left", systemImage: "clock.fill", tint: .orange)
             }
         }
         .padding(.vertical, 6)

@@ -4,6 +4,11 @@
 //
 //  What is waiting to be practiced, on the home and lock screens.
 //
+//  The visual idea: a day of practice is a fixed, finishable unit (the daily
+//  quota), drawn as one tick per card — hot ember while a card is waiting,
+//  quenched steel once it has been practiced. The day cools as you work,
+//  which is the app's name (鍛錬, forging) made visible.
+//
 
 import SwiftUI
 import WidgetKit
@@ -21,6 +26,9 @@ struct DueEntry: TimelineEntry {
     var dueCount: Int { snapshot.totalDueCount(at: date) }
     var decks: [DeckSnapshot] { snapshot.decksWithDueCards(at: date) }
     var practicedToday: Int { snapshot.practicedCount(onDayOf: date) }
+
+    /// Everything today asked for has been practiced.
+    var isDoneForToday: Bool { dueCount == 0 && practicedToday > 0 }
 }
 
 struct DueProvider: TimelineProvider {
@@ -72,6 +80,88 @@ struct DueCardsWidget: Widget {
     }
 }
 
+// MARK: - Palette
+
+private extension Color {
+    /// Hot: a card still waiting in today's session.
+    static let ember = Color(red: 0.894, green: 0.341, blue: 0.180)
+    /// Cool: a card already practiced — the day quenches as you work.
+    static let steel = Color(red: 0.439, green: 0.561, blue: 0.659)
+}
+
+// MARK: - Shared pieces
+
+/// One tick per card in today's session: steel for practiced, ember for
+/// waiting. An untouched day shows the shape of its quota as a faint track.
+/// Falls back to a proportional bar when several busy decks would need more
+/// ticks than fit legibly.
+private struct StrikeMeter: View {
+    let done: Int
+    let remaining: Int
+    var height: CGFloat = 5
+    var centered = false
+
+    private static let maxTicks = 14
+
+    var body: some View {
+        Group {
+            if done + remaining == 0 {
+                ticks([(PracticePolicy.maxCardsPerDay, Color.secondary.opacity(0.18))])
+            } else if done + remaining <= Self.maxTicks {
+                ticks([(done, .steel.opacity(0.65)), (remaining, .ember)])
+            } else {
+                proportionalBar
+            }
+        }
+        .frame(height: height)
+        .accessibilityElement()
+        .accessibilityLabel("\(remaining) cards left today, \(done) practiced")
+    }
+
+    private func ticks(_ groups: [(count: Int, color: Color)]) -> some View {
+        HStack(spacing: 3) {
+            if centered { Spacer(minLength: 0) }
+            ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                ForEach(0..<group.count, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .fill(group.color)
+                        .frame(maxWidth: 20)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var proportionalBar: some View {
+        GeometryReader { geo in
+            let total = CGFloat(done + remaining)
+            HStack(spacing: 2) {
+                if done > 0 {
+                    Capsule().fill(Color.steel.opacity(0.65))
+                        .frame(width: geo.size.width * CGFloat(done) / total)
+                }
+                if remaining > 0 {
+                    Capsule().fill(Color.ember)
+                }
+            }
+        }
+    }
+}
+
+/// The app's mark: the spiral and the name in serif.
+private struct Wordmark: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "tornado")
+                .font(.system(size: 10, weight: .bold))
+            Text("Tanren")
+                .font(.system(.caption2, design: .serif).weight(.semibold))
+        }
+        .foregroundStyle(.secondary)
+        .widgetAccentable()
+    }
+}
+
 // MARK: - Views
 
 struct DueCardsView: View {
@@ -81,7 +171,7 @@ struct DueCardsView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text(entry.dueCount == 0 ? "Nothing due" : "\(entry.dueCount) due")
+            Text(entry.inlineText)
         case .accessoryCircular:
             CircularDueView(entry: entry)
         case .accessoryRectangular:
@@ -90,23 +180,8 @@ struct DueCardsView: View {
             SmallDueView(entry: entry)
                 .widgetURL(entry.decks.first?.deepLink ?? PracticeSnapshot.deckListDeepLink)
         default:
-            ListDueView(entry: entry, rowLimit: family == .systemLarge ? 6 : 3)
+            ListDueView(entry: entry, rowLimit: family == .systemLarge ? 5 : 2)
         }
-    }
-}
-
-/// The headline number, sized to fill whatever space it's given.
-private struct DueCount: View {
-    let count: Int
-
-    var body: some View {
-        Text("\(count)")
-            .font(.system(size: 44, weight: .bold, design: .rounded))
-            .minimumScaleFactor(0.5)
-            .lineLimit(1)
-            .monospacedDigit()
-            .contentTransition(.numericText())
-            .foregroundStyle(count == 0 ? .secondary : Color.dueTint)
     }
 }
 
@@ -114,35 +189,51 @@ private struct SmallDueView: View {
     let entry: DueEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                Image(systemName: "music.note")
-                    .font(.system(size: 10, weight: .bold))
-                Text("Tanren")
-                    .font(.caption2.weight(.semibold))
+        VStack(spacing: 0) {
+            Wordmark()
+
+            Spacer(minLength: 4)
+
+            if entry.isDoneForToday {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(Color.steel)
+                Spacer(minLength: 4)
+                Text("Done for today")
+                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+            } else if entry.dueCount == 0 {
+                Text("Nothing due")
+                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("\(entry.dueCount)")
+                    .font(.system(size: 42, weight: .bold, design: .serif))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(Color.ember)
+                Text(entry.dueCount == 1 ? "card left today" : "cards left today")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.secondary)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 6)
 
-            DueCount(count: entry.dueCount)
-
-            Text(entry.dueCount == 1 ? "card due" : "cards due")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            Spacer(minLength: 4)
+            StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount, centered: true)
 
             Text(entry.footnote)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .padding(.top, 5)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-/// Medium and large: the actual list of what's waiting, a row per deck.
+/// Medium and large: today's headline and meter, then a row per deck.
 private struct ListDueView: View {
     let entry: DueEntry
     let rowLimit: Int
@@ -150,12 +241,16 @@ private struct ListDueView: View {
     private var decks: [DeckSnapshot] { Array(entry.decks.prefix(rowLimit)) }
     private var hiddenDeckCount: Int { max(0, entry.decks.count - rowLimit) }
 
+    private var headline: String {
+        if entry.isDoneForToday { return "Done for today" }
+        if entry.dueCount == 0 { return "Nothing due" }
+        return "\(entry.dueCount) left today"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(entry.dueCount == 0 ? "Nothing due" : "\(entry.dueCount) due")
-                    .font(.headline)
-                    .foregroundStyle(entry.dueCount == 0 ? .secondary : Color.dueTint)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Wordmark()
                 Spacer(minLength: 4)
                 Text(entry.footnote)
                     .font(.caption2)
@@ -163,18 +258,24 @@ private struct ListDueView: View {
                     .lineLimit(1)
             }
 
+            Text(headline)
+                .font(.system(.title3, design: .serif).weight(.semibold))
+                .foregroundStyle(entry.dueCount > 0 ? Color.primary : Color.secondary)
+
+            StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount)
+
             if decks.isEmpty {
                 Spacer(minLength: 0)
-                Text(entry.emptyMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                emptyState
                 Spacer(minLength: 0)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 0) {
                     ForEach(decks) { deck in
                         Link(destination: deck.deepLink) {
                             DeckRow(deck: deck, date: entry.date)
+                        }
+                        if deck.id != decks.last?.id {
+                            Divider()
                         }
                     }
                 }
@@ -190,6 +291,26 @@ private struct ListDueView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetURL(PracticeSnapshot.deckListDeepLink)
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if entry.isDoneForToday {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.steel)
+                Text("\(entry.practicedToday) card\(entry.practicedToday == 1 ? "" : "s") practiced")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(entry.emptyMessage)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -222,19 +343,11 @@ private struct DeckRow: View {
             Spacer(minLength: 4)
 
             Text("\(count)")
-                .font(.caption.weight(.bold))
+                .font(.callout.weight(.bold))
                 .monospacedDigit()
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.dueTint.opacity(0.18)))
-                .foregroundStyle(Color.dueTint)
+                .foregroundStyle(Color.ember)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.quaternary.opacity(0.5))
-        )
+        .padding(.vertical, 5)
         .foregroundStyle(.primary)
     }
 }
@@ -242,14 +355,26 @@ private struct DeckRow: View {
 private struct CircularDueView: View {
     let entry: DueEntry
 
+    /// The ring fills as the day's session gets done, not as debt piles up.
+    private var progress: Double {
+        let total = entry.practicedToday + entry.dueCount
+        guard total > 0 else { return 0 }
+        return Double(entry.practicedToday) / Double(total)
+    }
+
     var body: some View {
-        Gauge(value: Double(min(entry.dueCount, 20)), in: 0...20) {
-            Image(systemName: "music.note")
+        Gauge(value: progress) {
+            Image(systemName: "tornado")
         } currentValueLabel: {
-            Text("\(entry.dueCount)")
-                .monospacedDigit()
+            if entry.isDoneForToday {
+                Image(systemName: "checkmark")
+            } else {
+                Text("\(entry.dueCount)")
+                    .monospacedDigit()
+            }
         }
         .gaugeStyle(.accessoryCircular)
+        .tint(.ember)
     }
 }
 
@@ -257,40 +382,39 @@ private struct RectangularDueView: View {
     let entry: DueEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Tanren")
                 .font(.caption2.weight(.semibold))
                 .widgetAccentable()
-            Text(entry.dueCount == 0 ? "Nothing due" : "\(entry.dueCount) cards due")
+            Text(entry.inlineText)
                 .font(.headline)
-            Text(entry.decks.first?.name ?? entry.footnote)
-                .font(.caption2)
-                .lineLimit(1)
+            StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount, height: 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-// MARK: - Copy and colour
-
-private extension Color {
-    /// The same orange the deck list uses for its "due" pill.
-    static let dueTint = Color.orange
-}
+// MARK: - Copy
 
 private extension DueEntry {
+    /// The one-line answer, for the inline and rectangular families.
+    var inlineText: String {
+        if isDoneForToday { return "Done for today" }
+        if dueCount == 0 { return "Nothing due" }
+        return "\(dueCount) left today"
+    }
+
     var footnote: String {
         guard hasSnapshot else { return "Open Tanren" }
         if practicedToday > 0 {
             return "\(practicedToday) done today"
         }
-        return snapshot.decks.isEmpty ? "No decks" : "Not started today"
+        return snapshot.decks.isEmpty ? "No decks yet" : "Not started today"
     }
 
     var emptyMessage: String {
         guard hasSnapshot else { return "Open Tanren to set up your decks." }
         if snapshot.decks.isEmpty { return "Create a deck to start practicing." }
-        if practicedToday > 0 { return "Everything due today is done. Nice." }
         return "Nothing is due yet — come back later."
     }
 }
@@ -301,11 +425,11 @@ extension PracticeSnapshot {
     /// Stand-in for the widget gallery and Xcode previews.
     static var preview: PracticeSnapshot {
         let now = Date()
-        func card(_ name: String, days: Double, reviewed: Bool = true) -> CardSnapshot {
+        func card(_ name: String, days: Double, reviewed: Bool = true, today: Bool = false) -> CardSnapshot {
             CardSnapshot(
                 name: name,
                 nextReviewDate: now.addingTimeInterval(days * 86_400),
-                lastReviewDate: reviewed ? now.addingTimeInterval(-3 * 86_400) : nil,
+                lastReviewDate: today ? now : (reviewed ? now.addingTimeInterval(-3 * 86_400) : nil),
                 isSuspended: false
             )
         }
@@ -318,6 +442,8 @@ extension PracticeSnapshot {
                     card("D ↔ A", days: -1),
                     card("Em ↔ Am", days: -0.5),
                     card("F ↔ C", days: -0.2),
+                    card("A ↔ E", days: -0.1, today: true),
+                    card("Am ↔ C", days: -0.1, today: true),
                     card("G ↔ D", days: 2),
                 ]),
                 DeckSnapshot(id: "preview-scales", name: "Scales", cards: [
@@ -328,12 +454,31 @@ extension PracticeSnapshot {
             ]
         )
     }
+
+    /// Everything practiced: the state worth designing for.
+    static var previewDone: PracticeSnapshot {
+        let now = Date()
+        return PracticeSnapshot(
+            generatedAt: now,
+            decks: [
+                DeckSnapshot(id: "preview-chords", name: "Chords", cards: (0..<8).map {
+                    CardSnapshot(
+                        name: "Card \($0)",
+                        nextReviewDate: now.addingTimeInterval(-3_600),
+                        lastReviewDate: now,
+                        isSuspended: false
+                    )
+                }),
+            ]
+        )
+    }
 }
 
 #Preview("Small", as: .systemSmall) {
     DueCardsWidget()
 } timeline: {
     DueEntry(date: .now, snapshot: .preview)
+    DueEntry(date: .now, snapshot: .previewDone)
     DueEntry(date: .now, snapshot: .empty)
 }
 
@@ -341,6 +486,7 @@ extension PracticeSnapshot {
     DueCardsWidget()
 } timeline: {
     DueEntry(date: .now, snapshot: .preview)
+    DueEntry(date: .now, snapshot: .previewDone)
     DueEntry(date: .now, snapshot: .empty)
 }
 
@@ -354,4 +500,5 @@ extension PracticeSnapshot {
     DueCardsWidget()
 } timeline: {
     DueEntry(date: .now, snapshot: .preview)
+    DueEntry(date: .now, snapshot: .previewDone)
 }
