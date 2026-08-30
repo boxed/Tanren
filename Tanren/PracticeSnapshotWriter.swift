@@ -23,10 +23,12 @@ extension Card {
 }
 
 extension Deck {
-    /// Cards waiting to be practiced. The deck list and the widget both use
-    /// this, so the two never disagree about what "due" means.
+    /// Cards today's session still asks for: the due backlog, capped by what
+    /// remains of the daily quota. The deck list and the widget both apply
+    /// this cap, so the two never disagree about what "due" means.
     var dueCount: Int {
-        cards.filter(\.isWaitingForReview).count
+        let remainingQuota = PracticePolicy.maxCardsPerDay - SpacedRepetitionManager.cardsPracticedToday(in: self)
+        return min(cards.filter(\.isWaitingForReview).count, max(0, remainingQuota))
     }
 }
 

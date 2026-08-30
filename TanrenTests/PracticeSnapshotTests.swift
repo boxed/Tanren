@@ -90,6 +90,29 @@ struct DeckSnapshotTests {
         // "Em ↔ Am" has come due, and "G ↔ D" is no longer counted as done today.
         #expect(deck.dueCount(at: later, calendar: calendar) == 4)
     }
+
+    @Test func dueCountIsCappedAtTheDailyQuota() {
+        let backlog = DeckSnapshot(id: "deck-2", name: "Backlog", cards:
+            (0..<21).map { card("Card \($0)", due: -day) }
+        )
+        #expect(backlog.dueCount(at: now, calendar: calendar) == PracticePolicy.maxCardsPerDay)
+    }
+
+    @Test func todaysPracticeEatsIntoTheQuota() {
+        let cards = (0..<21).map { card("Card \($0)", due: -day) }
+            + (0..<4).map { card("Done \($0)", due: -day, lastReview: -60) }
+        let deck = DeckSnapshot(id: "deck-3", name: "Backlog", cards: cards)
+        #expect(deck.dueCount(at: now, calendar: calendar) == 6)
+    }
+
+    @Test func aFinishedSessionShowsNothingDueDespiteTheBacklog() {
+        let cards = (0..<21).map { card("Card \($0)", due: -day) }
+            + (0..<PracticePolicy.maxCardsPerDay).map { card("Done \($0)", due: -day, lastReview: -60) }
+        let deck = DeckSnapshot(id: "deck-4", name: "Backlog", cards: cards)
+        #expect(deck.dueCount(at: now, calendar: calendar) == 0)
+        // The quota comes back at midnight.
+        #expect(deck.dueCount(at: now.addingTimeInterval(day), calendar: calendar) == PracticePolicy.maxCardsPerDay)
+    }
 }
 
 struct PracticeSnapshotTests {
@@ -221,6 +244,25 @@ struct PracticeSnapshotWriterTests {
         #expect(!later.isWaitingForReview)
         #expect(!suspended.isEligibleForPractice)
         #expect(!doneToday.isEligibleForPractice)
+    }
+
+    @Test func deckDueCountIsCappedByTheDailyQuota() throws {
+        let store = try TestStore()
+        let context = store.context
+        let deck = Deck(name: "Chords")
+        context.insert(deck)
+
+        for i in 0..<(PracticePolicy.maxCardsPerDay + 2) {
+            let card = Card(chord1: "C\(i)", chord2: "G", deck: deck)
+            context.insert(card)
+            deck.cards.append(card)
+        }
+        #expect(deck.dueCount == PracticePolicy.maxCardsPerDay)
+
+        // Practicing uses up the quota even while the backlog stays larger.
+        deck.cards[0].lastReviewDate = Date()
+        deck.cards[1].lastReviewDate = Date()
+        #expect(deck.dueCount == PracticePolicy.maxCardsPerDay - 2)
     }
 
     @Test func deckReferenceResolvesByIdentityEvenAfterARename() throws {

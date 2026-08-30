@@ -96,7 +96,7 @@ struct SpacedRepetitionManager {
 
     /// Selects cards for practice from a deck
     /// Prioritizes due cards and weak spots, but includes some randomness
-    static func selectCardsForPractice(from deck: Deck, maxCards: Int = 10) -> [Card] {
+    static func selectCardsForPractice(from deck: Deck, maxCards: Int = PracticePolicy.maxCardsPerDay) -> [Card] {
         // Exclude suspended cards and cards already practiced today
         let allCards = deck.cards.filter(\.isEligibleForPractice)
 

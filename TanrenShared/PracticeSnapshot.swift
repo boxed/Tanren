@@ -27,6 +27,16 @@ enum SharedContainer {
     }
 }
 
+// MARK: - Practice policy
+
+/// A practice session asks for at most this many cards per deck per day.
+/// Every "due" number shown to the user is capped by it: a backlog larger
+/// than a day's session can clear reads as un-finishable pile-up, so the UI
+/// only ever asks for what today's session can actually absorb.
+enum PracticePolicy {
+    static let maxCardsPerDay = 10
+}
+
 // MARK: - Deep links
 
 /// The links the widget hands back to the app. Constructing and parsing live
@@ -134,8 +144,13 @@ struct DeckSnapshot: Codable, Hashable, Sendable, Identifiable {
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
 
+    /// How many cards today's session still asks for: the due backlog, capped
+    /// by what remains of the daily quota. Reaches zero once the day's session
+    /// is done, however large the backlog behind it.
     func dueCount(at date: Date, calendar: Calendar = .current) -> Int {
-        cards.filter { $0.isDue(at: date, calendar: calendar) }.count
+        let remainingQuota = PracticePolicy.maxCardsPerDay - practicedCount(onDayOf: date, calendar: calendar)
+        let backlog = cards.filter { $0.isDue(at: date, calendar: calendar) }.count
+        return min(backlog, max(0, remainingQuota))
     }
 
     func practicedCount(onDayOf date: Date, calendar: Calendar = .current) -> Int {
