@@ -148,14 +148,14 @@ private struct StrikeMeter: View {
     }
 }
 
-/// The app's mark: the spiral and the name in serif.
+/// The app's mark: the spiral and the name.
 private struct Wordmark: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "tornado")
                 .font(.system(size: 10, weight: .bold))
             Text("Tanren")
-                .font(.system(.caption2, design: .serif).weight(.semibold))
+                .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(.secondary)
         .widgetAccentable()
@@ -200,14 +200,14 @@ private struct SmallDueView: View {
                     .foregroundStyle(Color.steel)
                 Spacer(minLength: 4)
                 Text("Done for today")
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
             } else if entry.dueCount == 0 {
                 Text("Nothing due")
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             } else {
                 Text("\(entry.dueCount)")
-                    .font(.system(size: 42, weight: .bold, design: .serif))
+                    .font(.system(size: 42, weight: .bold))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .monospacedDigit()
@@ -259,7 +259,7 @@ private struct ListDueView: View {
             }
 
             Text(headline)
-                .font(.system(.title3, design: .serif).weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(entry.dueCount > 0 ? Color.primary : Color.secondary)
 
             StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount)
