@@ -148,20 +148,6 @@ private struct StrikeMeter: View {
     }
 }
 
-/// The app's mark: the spiral and the name.
-private struct Wordmark: View {
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "tornado")
-                .font(.system(size: 10, weight: .bold))
-            Text("Tanren")
-                .font(.caption2.weight(.semibold))
-        }
-        .foregroundStyle(.secondary)
-        .widgetAccentable()
-    }
-}
-
 // MARK: - Views
 
 struct DueCardsView: View {
@@ -180,7 +166,7 @@ struct DueCardsView: View {
             SmallDueView(entry: entry)
                 .widgetURL(entry.decks.first?.deepLink ?? PracticeSnapshot.deckListDeepLink)
         default:
-            ListDueView(entry: entry, rowLimit: family == .systemLarge ? 5 : 2)
+            ListDueView(entry: entry, rowLimit: family == .systemLarge ? 5 : 3)
         }
     }
 }
@@ -190,8 +176,6 @@ private struct SmallDueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Wordmark()
-
             Spacer(minLength: 4)
 
             if entry.isDoneForToday {
@@ -249,18 +233,16 @@ private struct ListDueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Wordmark()
+            HStack(alignment: .firstTextBaseline) {
+                Text(headline)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(entry.dueCount > 0 ? Color.primary : Color.secondary)
                 Spacer(minLength: 4)
                 Text(entry.footnote)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-
-            Text(headline)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(entry.dueCount > 0 ? Color.primary : Color.secondary)
 
             StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount)
 
@@ -383,11 +365,9 @@ private struct RectangularDueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Tanren")
-                .font(.caption2.weight(.semibold))
-                .widgetAccentable()
             Text(entry.inlineText)
                 .font(.headline)
+                .widgetAccentable()
             StrikeMeter(done: entry.practicedToday, remaining: entry.dueCount, height: 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
