@@ -106,7 +106,7 @@ private struct StrikeMeter: View {
     var body: some View {
         Group {
             if done + remaining == 0 {
-                ticks([(PracticePolicy.maxCardsPerDay, Color.secondary.opacity(0.18))])
+                ticks([(PracticePolicy.defaultMaxCardsPerDay, Color.secondary.opacity(0.18))])
             } else if done + remaining <= Self.maxTicks {
                 ticks([(done, .steel.opacity(0.65)), (remaining, .ember)])
             } else {

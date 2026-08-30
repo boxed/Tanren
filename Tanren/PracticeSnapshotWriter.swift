@@ -27,7 +27,7 @@ extension Deck {
     /// remains of the daily quota. The deck list and the widget both apply
     /// this cap, so the two never disagree about what "due" means.
     var dueCount: Int {
-        let remainingQuota = PracticePolicy.maxCardsPerDay - SpacedRepetitionManager.cardsPracticedToday(in: self)
+        let remainingQuota = dailyCardLimit - SpacedRepetitionManager.cardsPracticedToday(in: self)
         return min(cards.filter(\.isWaitingForReview).count, max(0, remainingQuota))
     }
 }
@@ -59,6 +59,7 @@ struct PracticeSnapshotWriter {
         DeckSnapshot(
             id: DeckReference.token(for: deck),
             name: deck.name,
+            maxCardsPerDay: deck.maxCardsPerDay,
             cards: deck.cards.map { card in
                 CardSnapshot(
                     name: card.name,

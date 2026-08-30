@@ -29,12 +29,13 @@ enum SharedContainer {
 
 // MARK: - Practice policy
 
-/// A practice session asks for at most this many cards per deck per day.
+/// A practice session asks for at most so many cards per deck per day.
 /// Every "due" number shown to the user is capped by it: a backlog larger
 /// than a day's session can clear reads as un-finishable pile-up, so the UI
-/// only ever asks for what today's session can actually absorb.
+/// only ever asks for what today's session can actually absorb. Each deck can
+/// set its own limit; this is what applies when it hasn't.
 enum PracticePolicy {
-    static let maxCardsPerDay = 10
+    static let defaultMaxCardsPerDay = 10
 }
 
 // MARK: - Deep links
@@ -135,7 +136,19 @@ struct DeckSnapshot: Codable, Hashable, Sendable, Identifiable {
     /// The deck's stable link identifier, so a tap can reopen it in the app.
     var id: String
     var name: String
+    /// The deck's own daily limit; nil means the default applies. Optional so
+    /// snapshots written before the field existed still decode.
+    var maxCardsPerDay: Int?
     var cards: [CardSnapshot]
+
+    init(id: String, name: String, maxCardsPerDay: Int? = nil, cards: [CardSnapshot]) {
+        self.id = id
+        self.name = name
+        self.maxCardsPerDay = maxCardsPerDay
+        self.cards = cards
+    }
+
+    var dailyLimit: Int { maxCardsPerDay ?? PracticePolicy.defaultMaxCardsPerDay }
 
     /// Cards waiting to be practiced, the longest-overdue one first.
     func dueCards(at date: Date, calendar: Calendar = .current) -> [CardSnapshot] {
@@ -148,7 +161,7 @@ struct DeckSnapshot: Codable, Hashable, Sendable, Identifiable {
     /// by what remains of the daily quota. Reaches zero once the day's session
     /// is done, however large the backlog behind it.
     func dueCount(at date: Date, calendar: Calendar = .current) -> Int {
-        let remainingQuota = PracticePolicy.maxCardsPerDay - practicedCount(onDayOf: date, calendar: calendar)
+        let remainingQuota = dailyLimit - practicedCount(onDayOf: date, calendar: calendar)
         let backlog = cards.filter { $0.isDue(at: date, calendar: calendar) }.count
         return min(backlog, max(0, remainingQuota))
     }

@@ -20,6 +20,15 @@ final class Deck {
     /// decks pick one up without a migration step.
     var linkID: UUID?
 
+    /// How many cards a day's session asks for in this deck. Optional so
+    /// existing decks need no migration; nil means the app-wide default.
+    var maxCardsPerDay: Int?
+
+    var dailyCardLimit: Int {
+        get { maxCardsPerDay ?? PracticePolicy.defaultMaxCardsPerDay }
+        set { maxCardsPerDay = newValue }
+    }
+
     @Relationship(deleteRule: .cascade, inverse: \Card.deck) var cardsRelation: [Card]?
 
     var cards: [Card] {

@@ -27,6 +27,16 @@ struct DeckSettingsView: View {
                 }
 
                 Section {
+                    Stepper(value: $deck.dailyCardLimit, in: 1...100) {
+                        LabeledContent("Daily Card Limit", value: "\(deck.dailyCardLimit)")
+                    }
+                } header: {
+                    Text("Practice Session")
+                } footer: {
+                    Text("How many cards a day's practice session asks for in this deck.")
+                }
+
+                Section {
                     Toggle("Side 2", isOn: $deck.side2Enabled)
                     Toggle("Images", isOn: $deck.imagesEnabled)
                     Toggle("URLs", isOn: $deck.urlEnabled)
