@@ -182,11 +182,8 @@ private struct SmallDueView: View {
 
             if entry.isDoneForToday {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 46))
+                    .font(.system(size: 58))
                     .foregroundStyle(Color.steel)
-                Spacer(minLength: 4)
-                Text("Done for today")
-                    .font(.subheadline.weight(.semibold))
             } else if entry.dueCount == 0 {
                 Text("Nothing due")
                     .font(.subheadline.weight(.semibold))
