@@ -60,6 +60,13 @@ final class Card {
     var intervalDays: Int = 1
     var reviewCount: Int = 0
 
+    /// The longest this card waits between reviews, in days. Nil means the
+    /// scheduler's own ceiling applies. Set it to 1 for something you want in
+    /// every session — a warm-up, say — that spaced repetition would otherwise
+    /// push months out once it goes well. Optional so existing stores need no
+    /// migration.
+    var maxIntervalDays: Int?
+
     var deck: Deck?
 
     // Suspended cards are excluded from practice
@@ -68,6 +75,15 @@ final class Card {
     // Interval timer fields
     var intervalTimerSeconds: String = ""  // Comma separated seconds, e.g., "10, 50"
     var intervalTimerReps: Int = 1         // Number of repetitions
+
+    /// The meter the metronome counts for this card, stored as its notation
+    /// ("3/4"). Optional so existing stores need no migration; nil means 4/4.
+    var timeSignatureRaw: String?
+
+    var timeSignature: TimeSignature {
+        get { timeSignatureRaw.flatMap(TimeSignature.init(rawValue:)) ?? .default }
+        set { timeSignatureRaw = newValue.rawValue }
+    }
 
     init(chord1: String, chord2: String, deck: Deck? = nil, imageData: Data? = nil, url: String? = nil) {
         self.chord1 = chord1

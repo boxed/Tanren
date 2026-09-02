@@ -185,6 +185,8 @@ struct AddCardView: View {
     @State private var showingImagePicker = false
     @State private var intervalTimerSeconds = ""
     @State private var intervalTimerReps = 1
+    @State private var maxIntervalDays: Int?
+    @State private var timeSignature: TimeSignature = .default
 
     var body: some View {
         NavigationStack {
@@ -195,6 +197,12 @@ struct AddCardView: View {
                         TextField("Side 2", text: $side2)
                     }
                 }
+
+                if deck.metronomeEnabled {
+                    TimeSignatureSection(timeSignature: $timeSignature)
+                }
+
+                ReviewCeilingSection(maxIntervalDays: $maxIntervalDays)
 
                 if deck.imagesEnabled {
                     Section("Image") {
@@ -269,6 +277,8 @@ struct AddCardView: View {
         )
         card.intervalTimerSeconds = intervalTimerSeconds.trimmingCharacters(in: .whitespaces)
         card.intervalTimerReps = intervalTimerReps
+        card.maxIntervalDays = maxIntervalDays
+        card.timeSignature = timeSignature
         deck.cards.append(card)
         modelContext.insert(card)
         dismiss()
@@ -286,6 +296,8 @@ struct EditCardView: View {
     @State private var showingImagePicker = false
     @State private var intervalTimerSeconds: String
     @State private var intervalTimerReps: Int
+    @State private var maxIntervalDays: Int?
+    @State private var timeSignature: TimeSignature
 
     init(card: Card) {
         self.card = card
@@ -294,6 +306,8 @@ struct EditCardView: View {
         _url = State(initialValue: card.url ?? "")
         _intervalTimerSeconds = State(initialValue: card.intervalTimerSeconds)
         _intervalTimerReps = State(initialValue: card.intervalTimerReps)
+        _maxIntervalDays = State(initialValue: card.maxIntervalDays)
+        _timeSignature = State(initialValue: card.timeSignature)
         if let imageData = card.imageData, let image = UIImage(data: imageData) {
             _selectedImage = State(initialValue: image)
         } else {
@@ -310,6 +324,12 @@ struct EditCardView: View {
                         TextField("Side 2", text: $side2)
                     }
                 }
+
+                if card.deck?.metronomeEnabled == true {
+                    TimeSignatureSection(timeSignature: $timeSignature)
+                }
+
+                ReviewCeilingSection(maxIntervalDays: $maxIntervalDays)
 
                 if card.deck?.imagesEnabled == true {
                     Section("Image") {
@@ -381,7 +401,59 @@ struct EditCardView: View {
         card.url = trimmedUrl.isEmpty ? nil : trimmedUrl
         card.intervalTimerSeconds = intervalTimerSeconds.trimmingCharacters(in: .whitespaces)
         card.intervalTimerReps = intervalTimerReps
+        card.maxIntervalDays = maxIntervalDays
+        card.timeSignature = timeSignature
+        // A card already scheduled months out should feel the new ceiling now,
+        // not after its next review.
+        SpacedRepetitionManager.enforceIntervalCeiling(on: card)
         dismiss()
+    }
+}
+
+struct TimeSignatureSection: View {
+    @Binding var timeSignature: TimeSignature
+
+    var body: some View {
+        Section("Metronome") {
+            Picker("Time Signature", selection: $timeSignature) {
+                ForEach(TimeSignature.allCases) { signature in
+                    Text(signature.rawValue).tag(signature)
+                }
+            }
+        }
+    }
+}
+
+/// Lets a card opt out of being pushed far into the future: a warm-up you want
+/// every day should not end up half a year out just because it went well.
+struct ReviewCeilingSection: View {
+    @Binding var maxIntervalDays: Int?
+
+    private static let choices: [Int?] = [nil, 1, 2, 3, 7, 14, 30]
+
+    private static func title(for days: Int?) -> String {
+        switch days {
+        case nil: return "Default"
+        case 1: return "Every day"
+        case 7: return "Every week"
+        case 14: return "Every 2 weeks"
+        case 30: return "Every month"
+        case let days?: return "Every \(days) days"
+        }
+    }
+
+    var body: some View {
+        Section {
+            Picker("Practice at least", selection: $maxIntervalDays) {
+                ForEach(Self.choices, id: \.self) { days in
+                    Text(Self.title(for: days)).tag(days)
+                }
+            }
+        } header: {
+            Text("Schedule")
+        } footer: {
+            Text("The longest this card waits between reviews. It still comes back sooner when it needs work.")
+        }
     }
 }
 

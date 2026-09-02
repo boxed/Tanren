@@ -6,6 +6,57 @@
 import AVFoundation
 import Combine
 
+/// The meters the metronome can count. The raw value is what gets stored on a
+/// card, so it is the human notation and must stay stable.
+enum TimeSignature: String, CaseIterable, Identifiable, Sendable {
+    case twoFour = "2/4"
+    case threeFour = "3/4"
+    case fourFour = "4/4"
+    case fiveFour = "5/4"
+    case sixEight = "6/8"
+    case sevenEight = "7/8"
+
+    static let `default` = TimeSignature.fourFour
+
+    var id: String { rawValue }
+
+    var beatsPerMeasure: Int {
+        switch self {
+        case .twoFour: return 2
+        case .threeFour: return 3
+        case .fourFour: return 4
+        case .fiveFour: return 5
+        case .sixEight: return 6
+        case .sevenEight: return 7
+        }
+    }
+
+    /// How hard a given beat (1-based) is struck. The downbeat is always the
+    /// strongest; compound and odd meters get a secondary accent where the
+    /// grouping breaks (6/8 as 3+3, 5/4 and 7/8 as 3+2 and 3+4).
+    func accent(onBeat beat: Int) -> ClickAccent {
+        if beat == 1 { return .strong }
+        switch self {
+        case .fiveFour, .sixEight, .sevenEight:
+            return beat == 4 ? .medium : .weak
+        case .twoFour, .threeFour, .fourFour:
+            return .weak
+        }
+    }
+}
+
+enum ClickAccent: Int, CaseIterable {
+    case strong, medium, weak
+
+    var volume: Float {
+        switch self {
+        case .strong: return 1.0
+        case .medium: return 0.65
+        case .weak: return 0.45
+        }
+    }
+}
+
 @MainActor
 class MetronomeEngine: ObservableObject {
     @Published var isPlaying = false
@@ -19,11 +70,21 @@ class MetronomeEngine: ObservableObject {
         }
     }
     @Published var currentBeat: Int = 0
-    @Published var beatsPerMeasure: Int = 4
+    @Published var timeSignature: TimeSignature = .default {
+        didSet {
+            if isPlaying {
+                // Restart so the downbeat lands where the new meter begins
+                stop()
+                start()
+            }
+        }
+    }
+
+    var beatsPerMeasure: Int { timeSignature.beatsPerMeasure }
 
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
-    private var clickBuffers: [AVAudioPCMBuffer] = []  // Beat 1-4 with decreasing volumes
+    private var clickBuffers: [ClickAccent: AVAudioPCMBuffer] = [:]
     private var timer: Timer?
 
     // Timing based on elapsed time to prevent drift
@@ -58,12 +119,9 @@ class MetronomeEngine: ObservableObject {
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
 
-        // Generate click sound buffers with decreasing volumes for beats 1-4
-        let volumes: [Float] = [1.0, 0.7, 0.5, 0.35]
-        for volume in volumes {
-            if let buffer = generateClickBuffer(format: format, volume: volume) {
-                clickBuffers.append(buffer)
-            }
+        // One click per accent level; the meter decides which one each beat gets
+        for accent in ClickAccent.allCases {
+            clickBuffers[accent] = generateClickBuffer(format: format, volume: accent.volume)
         }
 
         do {
@@ -204,11 +262,8 @@ class MetronomeEngine: ObservableObject {
     }
 
     private func playClick() {
-        guard let playerNode = playerNode, !clickBuffers.isEmpty else { return }
-
-        // Use buffer corresponding to current beat (1-4 mapped to index 0-3)
-        let bufferIndex = min(currentBeat - 1, clickBuffers.count - 1)
-        let buffer = clickBuffers[max(0, bufferIndex)]
+        guard let playerNode = playerNode,
+              let buffer = clickBuffers[timeSignature.accent(onBeat: currentBeat)] else { return }
 
         playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
         if !playerNode.isPlaying {

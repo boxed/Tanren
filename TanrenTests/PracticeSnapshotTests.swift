@@ -452,4 +452,200 @@ struct RunawayIntervalTests {
         #expect(SpacedRepetitionManager.repairRunawayIntervals(modelContext: store.context).count == 1)
         #expect(SpacedRepetitionManager.repairRunawayIntervals(modelContext: store.context).isEmpty)
     }
+
+    @Test func repairHonorsACardsOwnCeiling() throws {
+        let store = try TestStore()
+        let weekly = card(intervalDays: 30, lastReview: Date(), in: store.context)
+        weekly.maxIntervalDays = 7
+
+        #expect(SpacedRepetitionManager.repairRunawayIntervals(modelContext: store.context) == ["Grip strength"])
+        #expect(weekly.intervalDays == 7)
+        #expect(!weekly.isDue)
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct DailyRoundTests {
+
+    private func deck(_ name: String, limit: Int? = nil, in context: ModelContext) -> Deck {
+        let deck = Deck(name: name)
+        deck.maxCardsPerDay = limit
+        context.insert(deck)
+        return deck
+    }
+
+    @discardableResult
+    private func card(_ name: String, interval: Int, due: Bool = true, in deck: Deck, context: ModelContext) -> Card {
+        let card = Card(chord1: name, chord2: "", deck: deck)
+        context.insert(card)
+        deck.cards.append(card)
+        card.intervalDays = interval
+        card.nextReviewDate = due ? Date().addingTimeInterval(-3_600) : Date().addingTimeInterval(day)
+        return card
+    }
+
+    @Test func shorterIntervalsComeFirstAcrossDecks() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        let warmups = deck("Warm-ups", in: store.context)
+        card("Five day chord", interval: 5, in: chords, context: store.context)
+        card("Daily spider walk", interval: 1, in: warmups, context: store.context)
+        card("Three day chord", interval: 3, in: chords, context: store.context)
+
+        let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords, warmups])
+
+        #expect(round.map(\.chord1) == ["Daily spider walk", "Three day chord", "Five day chord"])
+    }
+
+    @Test func onlyDueEligibleCardsAreIncluded() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        card("Due", interval: 3, in: chords, context: store.context)
+        card("Later", interval: 3, due: false, in: chords, context: store.context)
+        card("Suspended", interval: 1, in: chords, context: store.context).isSuspended = true
+        card("Done today", interval: 1, in: chords, context: store.context).lastReviewDate = Date()
+
+        let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
+
+        #expect(round.map(\.chord1) == ["Due"])
+    }
+
+    @Test func eachDeckKeepsItsOwnDailyLimit() throws {
+        let store = try TestStore()
+        let small = deck("Small", limit: 1, in: store.context)
+        let big = deck("Big", limit: 3, in: store.context)
+        for i in 0..<4 {
+            card("Small \(i)", interval: 7, in: small, context: store.context)
+            card("Big \(i)", interval: 7, in: big, context: store.context)
+        }
+
+        let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [small, big])
+
+        #expect(round.count == 4)
+        #expect(round.filter { $0.deck === small }.count == 1)
+        #expect(round.filter { $0.deck === big }.count == 3)
+    }
+
+    @Test func aDeckSpendsItsQuotaOnItsMostUrgentCards() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 1, in: store.context)
+        card("Weekly", interval: 7, in: chords, context: store.context)
+        card("Daily", interval: 1, in: chords, context: store.context)
+
+        #expect(SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords]).map(\.chord1) == ["Daily"])
+    }
+
+    @Test func equalIntervalsAreAllIncludedInSomeOrder() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        for i in 0..<5 {
+            card("Card \(i)", interval: 3, in: chords, context: store.context)
+        }
+
+        let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
+
+        #expect(Set(round.map(\.chord1)) == Set((0..<5).map { "Card \($0)" }))
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct IntervalCeilingTests {
+
+    private func card(maxIntervalDays: Int?, in context: ModelContext) -> Card {
+        let deck = Deck(name: "Warm-ups")
+        context.insert(deck)
+        let card = Card(chord1: "Spider walk", chord2: "", deck: deck)
+        context.insert(card)
+        deck.cards.append(card)
+        card.maxIntervalDays = maxIntervalDays
+        return card
+    }
+
+    @Test func aCardWithoutItsOwnCeilingUsesTheGlobalOne() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: nil, in: store.context)
+        #expect(SpacedRepetitionManager.intervalCeiling(for: card) == SpacedRepetitionManager.maximumInterval)
+    }
+
+    @Test func aCardsCeilingStaysWithinTheGlobalOne() throws {
+        let store = try TestStore()
+        #expect(SpacedRepetitionManager.intervalCeiling(for: card(maxIntervalDays: 10_000, in: store.context)) == SpacedRepetitionManager.maximumInterval)
+        #expect(SpacedRepetitionManager.intervalCeiling(for: card(maxIntervalDays: 0, in: store.context)) == 1)
+    }
+
+    @Test func aDailyCardIsDueTomorrowNoMatterHowWellItWent() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: 1, in: store.context)
+        card.reviewCount = 20
+        card.intervalDays = 60
+        card.easeFactor = 2.5
+
+        SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: true)
+
+        #expect(card.intervalDays == 1)
+        #expect(Calendar.current.isDateInTomorrow(card.nextReviewDate))
+        #expect(card.nextReviewDate == Calendar.current.startOfDay(for: card.nextReviewDate))
+    }
+
+    @Test func theSecondReviewAlsoRespectsADailyCeiling() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: 1, in: store.context)
+        card.reviewCount = 1
+
+        // Normally the second success jumps straight to the three day interval.
+        SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: true)
+
+        #expect(card.intervalDays == 1)
+    }
+
+    @Test func aWeeklyCeilingIsARealCeilingNotAFixedInterval() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: 7, in: store.context)
+        card.reviewCount = 5
+        card.intervalDays = 4
+
+        SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: false)
+
+        // Halved and jittered, so still well under the cap.
+        #expect(card.intervalDays <= 2)
+    }
+
+    @Test func loweringTheCeilingPullsAScheduledCardBack() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: nil, in: store.context)
+        card.lastReviewDate = Date().addingTimeInterval(-3 * 86_400)
+        card.intervalDays = 170
+        card.nextReviewDate = Date().addingTimeInterval(167 * 86_400)
+
+        card.maxIntervalDays = 1
+        #expect(SpacedRepetitionManager.enforceIntervalCeiling(on: card))
+
+        #expect(card.intervalDays == 1)
+        // Last done three days ago with a one day ceiling: overdue, so due now.
+        #expect(card.isDue)
+        #expect(!SpacedRepetitionManager.enforceIntervalCeiling(on: card))
+    }
+
+    @Test func enforcingLeavesACardUnderItsCeilingAlone() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: 7, in: store.context)
+        let scheduled = Date().addingTimeInterval(3 * 86_400)
+        card.intervalDays = 3
+        card.nextReviewDate = scheduled
+
+        #expect(!SpacedRepetitionManager.enforceIntervalCeiling(on: card))
+        #expect(card.nextReviewDate == scheduled)
+    }
+
+    @Test func reviewsComeDueAtTheStartOfTheDay() throws {
+        let store = try TestStore()
+        let card = card(maxIntervalDays: nil, in: store.context)
+
+        SpacedRepetitionManager.completeReview(card: card, challengeSuccessful: true)
+
+        #expect(card.nextReviewDate == Calendar.current.startOfDay(for: card.nextReviewDate))
+        #expect(Calendar.current.isDateInTomorrow(card.nextReviewDate))
+    }
 }

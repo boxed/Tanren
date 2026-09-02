@@ -11,7 +11,15 @@ struct PracticeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    let deck: Deck
+    /// Where a session draws its cards from. Per-card features (metronome,
+    /// images, timers) always come from the card's own deck, so a session that
+    /// spans decks shows each card the way its deck is configured.
+    enum Scope {
+        case deck(Deck)
+        case allDecks([Deck])
+    }
+
+    let scope: Scope
     let startingCard: Card?
 
     @StateObject private var metronome = MetronomeEngine()
@@ -26,8 +34,19 @@ struct PracticeView: View {
     @State private var stageCompletedForCurrentCard = false
 
     init(deck: Deck, startingCard: Card? = nil) {
-        self.deck = deck
+        self.scope = .deck(deck)
         self.startingCard = startingCard
+    }
+
+    /// Today's due cards from every deck, most urgent first.
+    init(decks: [Deck]) {
+        self.scope = .allDecks(decks)
+        self.startingCard = nil
+    }
+
+    private var spansDecks: Bool {
+        if case .allDecks = scope { return true }
+        return false
     }
 
     var currentCard: Card? {
@@ -84,6 +103,17 @@ struct PracticeView: View {
                                 .foregroundStyle(.secondary)
                         }
 
+                        if currentCard?.deck?.metronomeEnabled ?? false, !sessionComplete {
+                            Button {
+                                // The tuner needs the audio session for recording.
+                                metronome.stop()
+                                showTuner = true
+                            } label: {
+                                Image(systemName: "tuningfork")
+                            }
+                            .accessibilityLabel("Tuner")
+                        }
+
                         Menu {
                             Button("Bury card") {
                                 showBuryConfirmation = true
@@ -96,6 +126,12 @@ struct PracticeView: View {
                         }
                     }
                 }
+            }
+            .sheet(isPresented: $showTuner, onDismiss: {
+                metronome.reclaimAudioSession()
+                intervalTimer.reclaimAudioSession()
+            }) {
+                TunerView()
             }
             .confirmationDialog("Bury this card?", isPresented: $showBuryConfirmation, titleVisibility: .visible) {
                 Button("Bury", role: .destructive) {
@@ -120,10 +156,15 @@ struct PracticeView: View {
                 if let startingCard = startingCard {
                     practiceCards = [startingCard]
                 } else {
-                    practiceCards = SpacedRepetitionManager.selectCardsForPractice(from: deck)
+                    switch scope {
+                    case .deck(let deck):
+                        practiceCards = SpacedRepetitionManager.selectCardsForPractice(from: deck)
+                    case .allDecks(let decks):
+                        practiceCards = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: decks)
+                    }
                 }
                 if let card = currentCard {
-                    metronome.setBPM(card.startingBPM(for: .comfortable))
+                    prepareMetronome(for: card)
                     configureIntervalTimer(for: card)
                 }
             }
@@ -144,13 +185,22 @@ struct PracticeView: View {
             GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: 20) {
-                    cardHeader(card: card)
+                    VStack(spacing: 6) {
+                        // Which deck this came from only matters when the
+                        // session mixes decks.
+                        if spansDecks, let deckName = card.deck?.name {
+                            Text(deckName)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        cardHeader(card: card)
+                    }
 
-                    if deck.metronomeEnabled {
+                    if card.deck?.metronomeEnabled ?? true {
                         stageIndicatorView(card: card)
                     }
 
-                    if deck.imagesEnabled, let imageData = card.imageData, let uiImage = UIImage(data: imageData) {
+                    if card.deck?.imagesEnabled == true, let imageData = card.imageData, let uiImage = UIImage(data: imageData) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFit()
@@ -159,7 +209,7 @@ struct PracticeView: View {
                             .padding(.horizontal, 16)
                     }
 
-                    if deck.urlEnabled, let urlString = card.url, let url = URL(string: urlString) {
+                    if card.deck?.urlEnabled == true, let urlString = card.url, let url = URL(string: urlString) {
                         Link(destination: url) {
                             HStack(spacing: 5) {
                                 Image(systemName: "link")
@@ -173,7 +223,7 @@ struct PracticeView: View {
                         .foregroundStyle(.tint)
                     }
 
-                    if deck.intervalTimersEnabled && !card.intervalTimerList.isEmpty {
+                    if card.deck?.intervalTimersEnabled == true && !card.intervalTimerList.isEmpty {
                         intervalTimerView(card: card)
                     }
                 }
@@ -184,7 +234,7 @@ struct PracticeView: View {
             }
 
             VStack(spacing: 14) {
-                if deck.metronomeEnabled {
+                if card.deck?.metronomeEnabled ?? true {
                     metronomeView
                 }
 
@@ -245,7 +295,7 @@ struct PracticeView: View {
         if currentCardIndex >= practiceCards.count {
             sessionComplete = true
         } else if let nextCard = currentCard {
-            metronome.setBPM(nextCard.startingBPM(for: .comfortable))
+            prepareMetronome(for: nextCard)
             configureIntervalTimer(for: nextCard)
         }
     }
@@ -270,7 +320,7 @@ struct PracticeView: View {
         if currentCardIndex >= practiceCards.count {
             sessionComplete = true
         } else if let nextCard = currentCard {
-            metronome.setBPM(nextCard.startingBPM(for: .comfortable))
+            prepareMetronome(for: nextCard)
             configureIntervalTimer(for: nextCard)
         }
 
@@ -330,6 +380,20 @@ struct PracticeView: View {
         metronome.setBPM(card.startingBPM(for: stage))
     }
 
+    /// A fresh card starts at its comfortable tempo, in its own meter.
+    private func prepareMetronome(for card: Card) {
+        metronome.timeSignature = card.timeSignature
+        metronome.setBPM(card.startingBPM(for: .comfortable))
+    }
+
+    /// Changing meter mid-practice sticks: it is a property of the exercise,
+    /// not of this session.
+    private func setTimeSignature(_ signature: TimeSignature) {
+        metronome.timeSignature = signature
+        currentCard?.timeSignature = signature
+        try? modelContext.save()
+    }
+
     private func stageColor(_ stage: PracticeStage) -> Color {
         if stage.rawValue < currentStage.rawValue {
             return .green // Completed
@@ -344,78 +408,62 @@ struct PracticeView: View {
     private var metronomeView: some View {
         VStack(spacing: 14) {
             HStack {
-                panelLabel("Metronome")
+                Image(systemName: "metronome.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Metronome")
                 Spacer()
-                beatIndicator
+                timeSignatureMenu
             }
 
-            // Tempo, transport and tuner on one row: everything you touch while
-            // playing sits within thumb reach of each other.
+            // Tempo and transport are one control: the readout you're watching
+            // is also the thing you tap to start and stop.
             HStack(spacing: 12) {
                 bpmStepButton("minus", action: metronome.decreaseBPM)
-
-                VStack(spacing: 0) {
-                    Text("\(metronome.bpm)")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(value: Double(metronome.bpm)))
-                        .animation(.easeOut(duration: 0.15), value: metronome.bpm)
-                        .lineLimit(1)
-                        .fixedSize()
-                    Text("BPM")
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-
+                transportButton
                 bpmStepButton("plus", action: metronome.increaseBPM)
             }
-
-            // Round transport, so it never reads as the same kind of control as
-            // the wide "done with this stage" button below the panel.
-            ZStack {
-                Button(action: { metronome.toggle() }) {
-                    Image(systemName: metronome.isPlaying ? "stop.fill" : "play.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 64)
-                        .background(
-                            Circle().fill(metronome.isPlaying ? Color.red : Color.green)
-                        )
-                        .transaction { $0.animation = nil }
-                }
-                .accessibilityLabel(metronome.isPlaying ? "Stop metronome" : "Start metronome")
-
-                Button(action: {
-                    // The tuner needs the audio session for recording.
-                    metronome.stop()
-                    showTuner = true
-                }) {
-                    Image(systemName: "tuningfork")
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(.tint)
-                        .frame(width: 46, height: 46)
-                        .background(Circle().fill(Color.accentColor.opacity(0.14)))
-                }
-                .accessibilityLabel("Tuner")
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
         .padding(16)
         .panel()
-        .sheet(isPresented: $showTuner, onDismiss: {
-            metronome.reclaimAudioSession()
-            intervalTimer.reclaimAudioSession()
-        }) {
-            TunerView()
-        }
     }
 
-    /// Names a control cluster, so the two round green transports on screen are
-    /// never ambiguous.
+    /// Green when stopped, red when running — the same color language the
+    /// old round transport used, now on the BPM readout itself.
+    private var transportButton: some View {
+        Button(action: { metronome.toggle() }) {
+            // Just icon and number. A tempo between minus and plus buttons in a
+            // metronome panel needs no unit label, and every label placement
+            // knocked the number off the icon's center line.
+            HStack(spacing: 12) {
+                Image(systemName: metronome.isPlaying ? "stop.fill" : "play.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .frame(width: 22)
+
+                Text("\(metronome.bpm)")
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(metronome.bpm)))
+                    .animation(.easeOut(duration: 0.15), value: metronome.bpm)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 68)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(metronome.isPlaying ? Color.red : Color.green)
+            )
+            .transaction { $0.animation = nil }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(metronome.isPlaying ? "Stop metronome" : "Start metronome")
+        .accessibilityValue("\(metronome.bpm) BPM")
+    }
+
+    /// Names a control cluster so it never gets mistaken for the metronome.
     private func panelLabel(_ text: String) -> some View {
         Text(text.uppercased())
             .font(.system(size: 10, weight: .bold))
@@ -423,12 +471,42 @@ struct PracticeView: View {
             .foregroundStyle(.tertiary)
     }
 
+    /// The meter readout doubles as the way to change it: tap the beats to
+    /// pick another time signature.
+    private var timeSignatureMenu: some View {
+        Menu {
+            Picker("Time Signature", selection: Binding(
+                get: { metronome.timeSignature },
+                set: { setTimeSignature($0) }
+            )) {
+                ForEach(TimeSignature.allCases) { signature in
+                    Text(signature.rawValue).tag(signature)
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(metronome.timeSignature.rawValue)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                beatIndicator
+            }
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Time signature")
+        .accessibilityValue(metronome.timeSignature.rawValue)
+    }
+
     /// The downbeat is drawn larger so you can find beat one at a glance.
     private var beatIndicator: some View {
         HStack(spacing: 10) {
             ForEach(1...metronome.beatsPerMeasure, id: \.self) { beat in
                 let isActive = beat == metronome.currentBeat && metronome.isPlaying
-                let size: CGFloat = beat == 1 ? 15 : 11
+                let size: CGFloat = switch metronome.timeSignature.accent(onBeat: beat) {
+                case .strong: 15
+                case .medium: 13
+                case .weak: 11
+                }
 
                 Circle()
                     .fill(isActive ? Color.accentColor : Color.secondary.opacity(0.25))
@@ -542,8 +620,8 @@ struct PracticeView: View {
                 }
             }
 
-            // Same control language as the metronome: round transport in the
-            // middle, round secondary action off to the side.
+            // Round transport in the middle, round secondary action off to the
+            // side — deliberately unlike the metronome's wide tempo tile.
             ZStack {
                 Button(action: { intervalTimer.toggle() }) {
                     Image(systemName: intervalTimer.isComplete
@@ -585,7 +663,7 @@ struct PracticeView: View {
 
     private func stageActionView(card: Card) -> some View {
         VStack(spacing: 8) {
-            if deck.metronomeEnabled {
+            if card.deck?.metronomeEnabled ?? true {
                 Text(currentStage.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -667,7 +745,7 @@ struct PracticeView: View {
                 metronome.stop()
                 sessionComplete = true
             } else if let nextCard = currentCard {
-                metronome.setBPM(nextCard.startingBPM(for: .comfortable))
+                prepareMetronome(for: nextCard)
                 configureIntervalTimer(for: nextCard)
             }
         }
@@ -713,7 +791,9 @@ struct PracticeView: View {
         ContentUnavailableView {
             Label("Nothing to Practice", systemImage: "music.note.list")
         } description: {
-            Text("Every card in this deck is done for today, or the deck is still empty.")
+            Text(spansDecks
+                 ? "Every card in every deck is done for today."
+                 : "Every card in this deck is done for today, or the deck is still empty.")
         } actions: {
             Button("Go Back") { dismiss() }
                 .buttonStyle(.bordered)
