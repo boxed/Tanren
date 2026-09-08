@@ -161,24 +161,6 @@ final class Card {
         return Calendar.current.isDateInToday(lastReview)
     }
 
-    /// Priority score for card selection (lower = higher priority)
-    var priorityScore: Double {
-        var score = easeFactor // Lower ease = harder = higher priority
-
-        // Overdue cards get priority boost
-        if isDue {
-            let overdueDays = Calendar.current.dateComponents([.day], from: nextReviewDate, to: Date()).day ?? 0
-            score -= Double(overdueDays) * 0.1
-        }
-
-        // Cards with no established BPM are new and need attention
-        if comfortableBPM == nil && stretchBPM == nil && challengeBPM == nil {
-            score -= 1.0
-        }
-
-        return score
-    }
-
     /// Parses intervalTimerSeconds into an array of integers
     var parsedIntervalSeconds: [Int] {
         intervalTimerSeconds

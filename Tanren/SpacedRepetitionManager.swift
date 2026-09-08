@@ -113,8 +113,15 @@ struct SpacedRepetitionManager {
         deck.cards.filter { $0.wasPracticedToday }.count
     }
 
-    /// Selects cards for practice from a deck
-    /// Prioritizes due cards and weak spots, but includes some randomness
+    /// One deck's session: today's due cards in the same urgency order the
+    /// all-decks session uses, so a card's place in the queue doesn't depend on
+    /// which button started the session.
+    ///
+    /// The one difference is the tail. A deck is somewhere you go to practice
+    /// *that* deck, so when the due backlog doesn't fill the day's quota the
+    /// remaining slots go to cards that aren't due yet, in random order — early
+    /// exposure rather than an empty session. Due cards are never displaced by
+    /// them.
     static func selectCardsForPractice(from deck: Deck, maxCards: Int? = nil) -> [Card] {
         // Exclude suspended cards and cards already practiced today
         let allCards = deck.cards.filter(\.isEligibleForPractice)
@@ -123,44 +130,23 @@ struct SpacedRepetitionManager {
         let remainingQuota = max(0, (maxCards ?? deck.dailyCardLimit) - cardsPracticedToday(in: deck))
         guard remainingQuota > 0 else { return [] }
 
-        // Separate due and not-due cards
-        let dueCards = allCards.filter { $0.isDue }
-        let notDueCards = allCards.filter { !$0.isDue }
+        let due = byUrgency(allCards.filter(\.isDue)).prefix(remainingQuota)
+        let exposure = allCards
+            .filter { !$0.isDue }
+            .shuffled()
+            .prefix(remainingQuota - due.count)
 
-        // Sort due cards by priority (lower score = higher priority)
-        let sortedDueCards = dueCards.sorted { $0.priorityScore < $1.priorityScore }
-
-        var selectedCards: [Card] = []
-
-        // Take up to 80% from due cards
-        let dueCount = min(sortedDueCards.count, Int(Double(remainingQuota) * 0.8))
-        selectedCards.append(contentsOf: sortedDueCards.prefix(dueCount))
-
-        // Fill remaining slots with random not-due cards (for exposure)
-        let remainingSlots = remainingQuota - selectedCards.count
-        if remainingSlots > 0 && !notDueCards.isEmpty {
-            let randomNotDue = notDueCards.shuffled().prefix(remainingSlots)
-            selectedCards.append(contentsOf: randomNotDue)
-        }
-
-        // If we still don't have enough, add more due cards
-        if selectedCards.count < remainingQuota && sortedDueCards.count > dueCount {
-            let additionalDue = sortedDueCards.dropFirst(dueCount).prefix(remainingQuota - selectedCards.count)
-            selectedCards.append(contentsOf: additionalDue)
-        }
-
-        // Shuffle to interleave (contextual interference effect)
-        return selectedCards.shuffled()
+        return Array(due) + exposure
     }
 
     /// Everything due today across the given decks, most urgent first.
     ///
     /// Urgency is what a skipped day would cost: a card on a daily cycle loses a
     /// whole repetition per day missed, one on a five day cycle only a fifth of
-    /// one. So shorter intervals come first, and cards on the same interval are
-    /// in random order. Each deck's daily limit still applies to its own cards,
-    /// and only due cards are included — no random exposure cards, unlike a
-    /// single deck's session.
+    /// one. So shorter intervals come first, with `byUrgency` below settling
+    /// cards that share a cycle. Each deck's daily limit still applies to its
+    /// own cards, and only due cards are included — no random exposure cards,
+    /// unlike a single deck's session.
     static func selectDueCardsAcrossDecks(from decks: [Deck]) -> [Card] {
         let perDeck = decks.flatMap { deck -> [Card] in
             let remainingQuota = max(0, deck.dailyCardLimit - cardsPracticedToday(in: deck))
@@ -170,12 +156,32 @@ struct SpacedRepetitionManager {
         return byUrgency(perDeck)
     }
 
-    /// Shortest interval first; ties broken randomly rather than by insertion
-    /// order, so the same few cards don't always lead.
+    /// Shortest interval first, then the cards the user pinned to that cycle,
+    /// then the longest-waiting ones, then chance.
+    ///
+    /// The interval alone is not enough to rank by: a card that has never been
+    /// practiced also sits at a one day interval, because that is where every
+    /// card starts. So a daily warm-up ties with every new card in the deck
+    /// and, in a deck of new cards, loses the draw for the day's quota almost
+    /// every time. A card with its own review ceiling is a standing
+    /// commitment — it is on a one day cycle because it was put there, and
+    /// missing a day costs a whole repetition — so it goes ahead of a card
+    /// that is merely starting out and whose interval will stretch as it goes
+    /// well. The last two keys keep the longest-overdue card in front and
+    /// break exact ties randomly, so the same few cards don't always lead.
     private static func byUrgency(_ cards: [Card]) -> [Card] {
         cards
-            .map { (card: $0, tiebreak: Double.random(in: 0..<1)) }
-            .sorted { ($0.card.intervalDays, $0.tiebreak) < ($1.card.intervalDays, $1.tiebreak) }
+            .map {
+                (card: $0,
+                 cycle: $0.intervalDays,
+                 unpinned: $0.maxIntervalDays == nil ? 1 : 0,
+                 waitingSince: $0.nextReviewDate,
+                 tiebreak: Double.random(in: 0..<1))
+            }
+            .sorted {
+                ($0.cycle, $0.unpinned, $0.waitingSince, $0.tiebreak)
+                    < ($1.cycle, $1.unpinned, $1.waitingSince, $1.tiebreak)
+            }
             .map(\.card)
     }
 

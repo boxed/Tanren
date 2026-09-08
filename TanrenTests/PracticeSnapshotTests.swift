@@ -476,11 +476,12 @@ struct DailyRoundTests {
     }
 
     @discardableResult
-    private func card(_ name: String, interval: Int, due: Bool = true, in deck: Deck, context: ModelContext) -> Card {
+    private func card(_ name: String, interval: Int, ceiling: Int? = nil, due: Bool = true, in deck: Deck, context: ModelContext) -> Card {
         let card = Card(chord1: name, chord2: "", deck: deck)
         context.insert(card)
         deck.cards.append(card)
         card.intervalDays = interval
+        card.maxIntervalDays = ceiling
         card.nextReviewDate = due ? Date().addingTimeInterval(-3_600) : Date().addingTimeInterval(day)
         return card
     }
@@ -546,6 +547,48 @@ struct DailyRoundTests {
         let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
 
         #expect(Set(round.map(\.chord1)) == Set((0..<5).map { "Card \($0)" }))
+    }
+
+    /// A new card sits at a one day interval too, so a daily warm-up sharing a
+    /// deck with a pile of unpracticed cards used to be a coin flip away from
+    /// missing the day's quota entirely.
+    @Test func aDailyCardIsNotCrowdedOutByNewCards() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 3, in: store.context)
+        for i in 0..<20 {
+            card("New \(i)", interval: 1, in: chords, context: store.context)
+        }
+        card("Daily spider walk", interval: 1, ceiling: 1, in: chords, context: store.context)
+
+        for _ in 0..<20 {
+            let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
+            #expect(round.first?.chord1 == "Daily spider walk")
+        }
+    }
+
+    @Test func aPinnedCardStillYieldsToAShorterCycle() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        card("Weekly warm-up", interval: 7, ceiling: 7, in: chords, context: store.context)
+        card("Struggling chord", interval: 1, in: chords, context: store.context)
+
+        let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
+
+        #expect(round.map(\.chord1) == ["Struggling chord", "Weekly warm-up"])
+    }
+
+    @Test func theLongestOverdueCardLeadsAmongEquals() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        let recent = card("Due today", interval: 3, in: chords, context: store.context)
+        let stale = card("Due last week", interval: 3, in: chords, context: store.context)
+        recent.nextReviewDate = Date().addingTimeInterval(-3_600)
+        stale.nextReviewDate = Date().addingTimeInterval(-7 * day)
+
+        for _ in 0..<20 {
+            let round = SpacedRepetitionManager.selectDueCardsAcrossDecks(from: [chords])
+            #expect(round.map(\.chord1) == ["Due last week", "Due today"])
+        }
     }
 }
 
@@ -647,5 +690,112 @@ struct IntervalCeilingTests {
 
         #expect(card.nextReviewDate == Calendar.current.startOfDay(for: card.nextReviewDate))
         #expect(Calendar.current.isDateInTomorrow(card.nextReviewDate))
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct DeckRoundTests {
+
+    private func deck(_ name: String, limit: Int? = nil, in context: ModelContext) -> Deck {
+        let deck = Deck(name: name)
+        deck.maxCardsPerDay = limit
+        context.insert(deck)
+        return deck
+    }
+
+    @discardableResult
+    private func card(_ name: String, interval: Int, ceiling: Int? = nil, due: Bool = true, in deck: Deck, context: ModelContext) -> Card {
+        let card = Card(chord1: name, chord2: "", deck: deck)
+        context.insert(card)
+        deck.cards.append(card)
+        card.intervalDays = interval
+        card.maxIntervalDays = ceiling
+        card.nextReviewDate = due ? Date().addingTimeInterval(-3_600) : Date().addingTimeInterval(day)
+        return card
+    }
+
+    /// The same guarantee as the all-decks session: which button started the
+    /// session must not change where a card lands in the queue.
+    @Test func aDailyCardLeadsItsOwnDecksSession() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 3, in: store.context)
+        for i in 0..<20 {
+            card("New \(i)", interval: 1, in: chords, context: store.context)
+        }
+        card("Daily spider walk", interval: 1, ceiling: 1, in: chords, context: store.context)
+
+        for _ in 0..<20 {
+            let round = SpacedRepetitionManager.selectCardsForPractice(from: chords)
+            #expect(round.first?.chord1 == "Daily spider walk")
+        }
+    }
+
+    @Test func dueCardsComeInUrgencyOrder() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", in: store.context)
+        card("Five day chord", interval: 5, in: chords, context: store.context)
+        card("Three day chord", interval: 3, in: chords, context: store.context)
+        card("Daily spider walk", interval: 1, ceiling: 1, in: chords, context: store.context)
+
+        let round = SpacedRepetitionManager.selectCardsForPractice(from: chords)
+
+        #expect(round.map(\.chord1) == ["Daily spider walk", "Three day chord", "Five day chord"])
+    }
+
+    @Test func exposureCardsNeverDisplaceDueOnes() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 3, in: store.context)
+        for i in 0..<5 {
+            card("Due \(i)", interval: 3, in: chords, context: store.context)
+        }
+        for i in 0..<5 {
+            card("Later \(i)", interval: 3, due: false, in: chords, context: store.context)
+        }
+
+        let round = SpacedRepetitionManager.selectCardsForPractice(from: chords)
+
+        #expect(round.count == 3)
+        #expect(round.allSatisfy { $0.chord1.hasPrefix("Due") })
+    }
+
+    /// A deck is where you go to practice that deck, so a thin backlog is
+    /// topped up with cards that aren't due yet rather than ending the session.
+    @Test func aThinBacklogIsToppedUpWithExposureCards() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 3, in: store.context)
+        card("Due now", interval: 3, in: chords, context: store.context)
+        for i in 0..<5 {
+            card("Later \(i)", interval: 3, due: false, in: chords, context: store.context)
+        }
+
+        let round = SpacedRepetitionManager.selectCardsForPractice(from: chords)
+
+        #expect(round.count == 3)
+        #expect(round.first?.chord1 == "Due now")
+        #expect(round.dropFirst().allSatisfy { $0.chord1.hasPrefix("Later") })
+    }
+
+    @Test func cardsPracticedTodayAreOutAndStillSpendTheQuota() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 2, in: store.context)
+        card("Done today", interval: 1, ceiling: 1, in: chords, context: store.context).lastReviewDate = Date()
+        card("Suspended", interval: 1, in: chords, context: store.context).isSuspended = true
+        card("Due A", interval: 3, in: chords, context: store.context)
+        card("Due B", interval: 3, in: chords, context: store.context)
+
+        let round = SpacedRepetitionManager.selectCardsForPractice(from: chords)
+
+        #expect(round.count == 1)
+        #expect(round.first?.chord1.hasPrefix("Due") == true)
+    }
+
+    @Test func aFinishedDeckOffersNothing() throws {
+        let store = try TestStore()
+        let chords = deck("Chords", limit: 1, in: store.context)
+        card("Done today", interval: 1, in: chords, context: store.context).lastReviewDate = Date()
+        card("Due", interval: 1, in: chords, context: store.context)
+
+        #expect(SpacedRepetitionManager.selectCardsForPractice(from: chords).isEmpty)
     }
 }

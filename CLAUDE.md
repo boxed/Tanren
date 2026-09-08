@@ -80,7 +80,10 @@ See `TestStore` in `PracticeSnapshotTests`.
 ### Practice Flow
 
 1. User selects deck → taps "Start Practice"
-2. SpacedRepetitionManager selects cards (prioritizes due/weak, adds randomness)
+2. SpacedRepetitionManager selects cards: today's due cards in urgency order
+   (shortest cycle first, cards pinned to that cycle ahead of cards that merely
+   start there, then longest-overdue, then random), capped by the deck's daily
+   limit. A single deck's session tops up a thin backlog with not-yet-due cards
 3. PracticeView shows card with metronome at appropriate BPM
 4. User rates performance (Struggling/Getting There/Mastered)
 5. Card BPM and scheduling updated, moves to next card
