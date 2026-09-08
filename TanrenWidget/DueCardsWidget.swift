@@ -165,8 +165,10 @@ struct DueCardsView: View {
         case .accessoryRectangular:
             if entry.isDoneForToday { Color.clear } else { RectangularDueView(entry: entry) }
         case .systemSmall:
+            // The deck list, not the busiest deck: practice starts from the
+            // top level and covers every deck's due cards.
             SmallDueView(entry: entry)
-                .widgetURL(entry.decks.first?.deepLink ?? PracticeSnapshot.deckListDeepLink)
+                .widgetURL(PracticeSnapshot.deckListDeepLink)
         default:
             ListDueView(entry: entry, rowLimit: family == .systemLarge ? 5 : 3)
         }
