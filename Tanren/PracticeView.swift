@@ -31,6 +31,7 @@ struct PracticeView: View {
     @State private var showBuryConfirmation = false
     @State private var showSuspendConfirmation = false
     @State private var showTuner = false
+    @State private var cardToEdit: Card?
     @State private var stageCompletedForCurrentCard = false
 
     init(deck: Deck, startingCard: Card? = nil) {
@@ -115,11 +116,21 @@ struct PracticeView: View {
                         }
 
                         Menu {
+                            Button("Edit") {
+                                cardToEdit = currentCard
+                            }
                             Button("Bury card") {
                                 showBuryConfirmation = true
                             }
-                            Button("Suspend card", role: .destructive) {
-                                showSuspendConfirmation = true
+                            if let card = currentCard, card.isSuspended {
+                                Button("Unsuspend card") {
+                                    card.isSuspended = false
+                                    try? modelContext.save()
+                                }
+                            } else {
+                                Button("Suspend card", role: .destructive) {
+                                    showSuspendConfirmation = true
+                                }
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
@@ -132,6 +143,16 @@ struct PracticeView: View {
                 intervalTimer.reclaimAudioSession()
             }) {
                 TunerView()
+            }
+            .sheet(item: $cardToEdit, onDismiss: {
+                // Pick up edits to the meter and interval timer, but keep the
+                // tempo the user has dialed in for this stage.
+                if let card = currentCard {
+                    metronome.timeSignature = card.timeSignature
+                    configureIntervalTimer(for: card)
+                }
+            }) { card in
+                EditCardView(card: card)
             }
             .confirmationDialog("Bury this card?", isPresented: $showBuryConfirmation, titleVisibility: .visible) {
                 Button("Bury", role: .destructive) {
